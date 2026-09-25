@@ -8,6 +8,7 @@
 [![Target SDK](https://img.shields.io/badge/Target%20SDK-36-3DDC84?logo=android&logoColor=white)](https://developer.android.com/about/versions/16)
 [![Architecture](https://img.shields.io/badge/Architecture-Clean%20%2B%20MVI-FF4081)](#clean-architecture)
 [![DI](https://img.shields.io/badge/DI-Koin%204.1-F88909?logo=kotlin&logoColor=white)](https://insert-koin.io)
+[![Storage](https://img.shields.io/badge/Storage-Room%202.8-4285F4?logo=sqlite&logoColor=white)](https://developer.android.com/training/data-storage/room)
 [![Async](https://img.shields.io/badge/Async-Coroutines%20%2B%20Flow-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/docs/flow.html)
 [![HTTP](https://img.shields.io/badge/HTTP-OkHttp%204.12-3E8E41?logo=square&logoColor=white)](https://square.github.io/okhttp/)
 [![Streaming](https://img.shields.io/badge/Streaming-SSE-FF6F00)](https://developer.mozilla.org/docs/Web/API/Server-sent_events)
@@ -34,6 +35,9 @@ and renders the reply as it arrives: reasoning tokens and answer tokens appear s
   and fenced code blocks with a language label, horizontal scrolling and a Copy button.
   Partial syntax mid-stream is handled: an unclosed fence renders as an open code block.
 - Shows stats under each reply: time to first token, number of UI updates, completion and reasoning tokens, total time, tok/s.
+- Saves chats on the device (Room). A drawer lists them newest first, titled after the first
+  message; each chat remembers its model, and the latest one reopens on launch.
+  Stopped or interrupted replies are saved with the text received so far.
 - Loads the model picker from `/v1/models`, grouped by provider (the `provider/` prefix of the id). Embedding models are hidden.
 
 ## How the stream flows
@@ -85,9 +89,12 @@ layer only depends on the use cases.
 | domain | [`model/`](app/src/main/java/com/example/bifrostchat/domain/model) | `ChatMessage`, `Role`, `StreamEvent`, `LlmModel`, `ModelGroup` |
 | domain | [`repository/ChatRepository.kt`](app/src/main/java/com/example/bifrostchat/domain/repository/ChatRepository.kt) | Interface the data layer implements |
 | domain | [`usecase/GetModelGroupsUseCase.kt`](app/src/main/java/com/example/bifrostchat/domain/usecase/GetModelGroupsUseCase.kt) | Drops non-chat models, groups by provider, sorts |
+| domain | [`usecase/SessionUseCases.kt`](app/src/main/java/com/example/bifrostchat/domain/usecase/SessionUseCases.kt) | Observe, load, create, delete sessions; save messages (sets the title) |
 | domain | [`usecase/StreamChatUseCase.kt`](app/src/main/java/com/example/bifrostchat/domain/usecase/StreamChatUseCase.kt) | Streams a reply; drops blank turns |
 | data | [`remote/BifrostApi.kt`](app/src/main/java/com/example/bifrostchat/data/remote/BifrostApi.kt) | OkHttp calls; turns the SSE body into a cancellable `Flow` |
 | data | [`remote/SseChunkParser.kt`](app/src/main/java/com/example/bifrostchat/data/remote/SseChunkParser.kt) | Parses one SSE line; `[DONE]` ends the stream, `error` payloads throw |
+| data | [`local/ChatDatabase.kt`](app/src/main/java/com/example/bifrostchat/data/local/ChatDatabase.kt) | Room entities (`sessions`, `messages`) and DAO; schema exported to `app/schemas/` |
+| data | [`repository/SessionRepositoryImpl.kt`](app/src/main/java/com/example/bifrostchat/data/repository/SessionRepositoryImpl.kt) | Maps Room entities to domain sessions and messages |
 | data | [`repository/ChatRepositoryImpl.kt`](app/src/main/java/com/example/bifrostchat/data/repository/ChatRepositoryImpl.kt) | Maps DTOs and gateway ids (`provider/name`) to domain models |
 | presentation | [`chat/ChatContract.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatContract.kt) | `ChatState`, `ChatIntent`, `ChatEffect`, `ChatResult` |
 | presentation | [`chat/ChatReducer.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatReducer.kt) | Pure reducer, including stream stats |
@@ -97,7 +104,7 @@ layer only depends on the use cases.
 | presentation | [`chat/SmoothReveal.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/SmoothReveal.kt) | Frame-driven, backlog-adaptive text reveal |
 | presentation | [`chat/markdown/`](app/src/main/java/com/example/bifrostchat/presentation/chat/markdown) | Streaming-tolerant Markdown parser (blocks and inline) and `MarkdownText` renderer |
 | presentation | [`chat/ChatScreen.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatScreen.kt) | `ChatScreen` (collects state and effects), stateless `ChatContent`, grouped model picker |
-| di | [`di/Modules.kt`](app/src/main/java/com/example/bifrostchat/di/Modules.kt) | Koin `dataModule`, `domainModule`, `presentationModule` |
+| di | [`di/Modules.kt`](app/src/main/java/com/example/bifrostchat/di/Modules.kt) | Koin `dataModule` (OkHttp, API, Room), `domainModule`, `presentationModule` |
 
 ## Notes from testing
 
@@ -119,6 +126,11 @@ a backlog, and text already present (after rotation or scrolling back) shows at 
 
 **Markdown is rendered per block.** Each paragraph, list item or code block is its own `Text`,
 so while a reply streams only the last block re-lays out; finished blocks are skipped.
+
+**Saving is per message, not per token.** The user's message is written when it is sent and
+the reply once, when the stream ends. The final write runs in `NonCancellable`, so a reply is
+still saved when the user taps Stop or switches chats mid-stream (switching waits for it with
+`cancelAndJoin`). A new chat isn't stored until its first message, so empty chats don't pile up.
 
 **Auto-scroll uses `reverseLayout`.** Scrolling to the last item after each update missed
 the bottom when the message grew or the keyboard opened. A reversed list keeps index 0
@@ -144,7 +156,8 @@ Then:
 
 ```sh
 ./gradlew installDebug        # build and install on a device or emulator
-./gradlew testDebugUnitTest   # SSE and Markdown parsers, reveal pacing, repository, use case, reducer, ViewModel, Koin graph (no network)
+./gradlew testDebugUnitTest          # SSE and Markdown parsers, reveal pacing, use cases, reducer, ViewModel, Koin graph (no network)
+./gradlew connectedDebugAndroidTest  # Room repository against a real database (needs a device or emulator)
 ```
 
 > [!WARNING]
@@ -154,7 +167,7 @@ Then:
 
 ## Stack
 
-Kotlin 2.2 · Jetpack Compose (BOM 2026.02) · Material 3 · MVI · Clean Architecture · Koin 4.1 · Coroutines/Flow · OkHttp 4.12 · `org.json`
+Kotlin 2.2 · Jetpack Compose (BOM 2026.02) · Material 3 · MVI · Clean Architecture · Koin 4.1 · Room 2.8 · Coroutines/Flow · OkHttp 4.12 · `org.json`
 
 ## License
 

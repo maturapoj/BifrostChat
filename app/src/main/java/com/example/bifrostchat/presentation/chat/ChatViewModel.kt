@@ -5,10 +5,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bifrostchat.domain.model.ChatMessage
 import com.example.bifrostchat.domain.model.Role
+import com.example.bifrostchat.domain.usecase.CreateSessionUseCase
+import com.example.bifrostchat.domain.usecase.DeleteSessionUseCase
 import com.example.bifrostchat.domain.usecase.GetModelGroupsUseCase
+import com.example.bifrostchat.domain.usecase.LoadSessionUseCase
+import com.example.bifrostchat.domain.usecase.ObserveSessionsUseCase
+import com.example.bifrostchat.domain.usecase.SaveMessageUseCase
+import com.example.bifrostchat.domain.usecase.SetSessionModelUseCase
 import com.example.bifrostchat.domain.usecase.StreamChatUseCase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,10 +25,22 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/** Groups the session use cases so the ViewModel constructor stays readable. */
+class SessionUseCases(
+    val observe: ObserveSessionsUseCase,
+    val load: LoadSessionUseCase,
+    val create: CreateSessionUseCase,
+    val delete: DeleteSessionUseCase,
+    val saveMessage: SaveMessageUseCase,
+    val setModel: SetSessionModelUseCase,
+)
 
 class ChatViewModel(
     private val getModelGroups: GetModelGroupsUseCase,
     private val streamChat: StreamChatUseCase,
+    private val sessions: SessionUseCases,
     private val clock: () -> Long = SystemClock::elapsedRealtime,
 ) : ViewModel() {
 
@@ -35,18 +55,18 @@ class ChatViewModel(
 
     init {
         onIntent(ChatIntent.LoadModels)
+        observeSessions()
     }
 
     fun onIntent(intent: ChatIntent) {
         when (intent) {
             ChatIntent.LoadModels -> loadModels()
-            is ChatIntent.SelectModel -> dispatch(ChatResult.ModelSelected(intent.modelId))
+            is ChatIntent.SelectModel -> selectModel(intent.modelId)
             is ChatIntent.Send -> send(intent.text)
             ChatIntent.Stop -> streamJob?.cancel()
-            ChatIntent.Clear -> {
-                streamJob?.cancel()
-                dispatch(ChatResult.Cleared)
-            }
+            ChatIntent.NewChat -> switchTo(null)
+            is ChatIntent.OpenSession -> switchTo(intent.id)
+            is ChatIntent.DeleteSession -> deleteSession(intent.id)
         }
     }
 
@@ -61,6 +81,47 @@ class ChatViewModel(
             } catch (e: Exception) {
                 _effects.send(ChatEffect.ModelsFailed(e.message ?: e.toString()))
             }
+        }
+    }
+
+    private fun observeSessions() {
+        viewModelScope.launch {
+            var first = true
+            sessions.observe().collect { list ->
+                dispatch(ChatResult.SessionsUpdated(list))
+                // Reopen the latest chat on launch, unless the user already started typing into a new one.
+                if (first && _state.value.messages.isEmpty()) list.firstOrNull()?.let { switchTo(it.id) }
+                first = false
+            }
+        }
+    }
+
+    private fun selectModel(modelId: String) {
+        dispatch(ChatResult.ModelSelected(modelId))
+        _state.value.currentSessionId?.let { id -> viewModelScope.launch { sessions.setModel(id, modelId) } }
+    }
+
+    /** Opens a saved session, or a new unsaved chat when [id] is null. A running stream is stopped (and saved) first. */
+    private fun switchTo(id: Long?) {
+        viewModelScope.launch {
+            streamJob?.cancelAndJoin()
+            if (id == null) {
+                dispatch(ChatResult.NewChatStarted)
+                return@launch
+            }
+            val loaded = sessions.load(id) ?: return@launch
+            nextId = (loaded.messages.maxOfOrNull { it.id } ?: 0) + 1
+            dispatch(ChatResult.SessionOpened(id, loaded.session.modelId, loaded.messages.map { it.toUi() }))
+        }
+    }
+
+    private fun deleteSession(id: Long) {
+        viewModelScope.launch {
+            if (id == _state.value.currentSessionId) {
+                streamJob?.cancelAndJoin()
+                dispatch(ChatResult.NewChatStarted)
+            }
+            sessions.delete(id)
         }
     }
 
@@ -79,7 +140,12 @@ class ChatViewModel(
         streamJob = viewModelScope.launch {
             val start = clock()
             var error: String? = null
+            var sessionId: Long? = null
             try {
+                sessionId = current.currentSessionId
+                    ?: sessions.create(current.selectedModelId).also { dispatch(ChatResult.SessionCreated(it)) }
+                sessions.saveMessage(sessionId, user.toSessionMessage())
+
                 streamChat(current.selectedModelId, history).coalesceTokens().collect { event ->
                     dispatch(ChatResult.StreamEventReceived(assistantId, event, clock() - start))
                 }
@@ -89,6 +155,12 @@ class ChatViewModel(
                 error = e.message ?: e.toString()
             } finally {
                 dispatch(ChatResult.StreamEnded(assistantId, error))
+                // Save the reply even when cancelled (Stop, or switching sessions), so partial answers persist.
+                val id = sessionId
+                val reply = _state.value.messages.find { it.id == assistantId }
+                if (id != null && reply != null && (reply.content.isNotEmpty() || reply.reasoning.isNotEmpty() || reply.error != null)) {
+                    withContext(NonCancellable) { sessions.saveMessage(id, reply.toSessionMessage()) }
+                }
             }
         }
     }

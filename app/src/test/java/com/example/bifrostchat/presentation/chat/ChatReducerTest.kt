@@ -62,9 +62,19 @@ class ChatReducerTest {
         assertEquals("p1/a", replaced.selectedModelId)
     }
 
-    @Test fun `clear empties messages`() {
-        val s = streaming.after(ChatResult.Cleared)
+    @Test fun `new chat empties messages and detaches from the session`() {
+        val s = streaming.after(ChatResult.SessionCreated(7), ChatResult.NewChatStarted)
         assertTrue(s.messages.isEmpty())
+        assertFalse(s.isStreaming)
+        assertEquals(null, s.currentSessionId)
+    }
+
+    @Test fun `opening a session restores its messages and model`() {
+        val restored = listOf(UiMessage(id = 3, role = Role.User, content = "old"))
+        val s = streaming.after(ChatResult.SessionOpened(7, "p/m", restored))
+        assertEquals(7L, s.currentSessionId)
+        assertEquals("p/m", s.selectedModelId)
+        assertEquals(restored, s.messages)
         assertFalse(s.isStreaming)
     }
 }

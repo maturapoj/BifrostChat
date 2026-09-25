@@ -1,5 +1,6 @@
 package com.example.bifrostchat.presentation.chat
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -18,6 +19,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.text.style.TextOverflow
+import com.example.bifrostchat.domain.model.ChatSession
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -54,6 +65,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.bifrostchat.domain.model.LlmModel
 import com.example.bifrostchat.domain.model.ModelGroup
 import com.example.bifrostchat.domain.model.Role
+import com.example.bifrostchat.domain.model.StreamStats
 import com.example.bifrostchat.presentation.chat.markdown.MarkdownText
 import com.example.bifrostchat.presentation.theme.BifrostChatTheme
 import org.koin.androidx.compose.koinViewModel
@@ -89,11 +101,29 @@ fun ChatContent(
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     val listState = rememberLazyListState()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
     // reverseLayout anchors index 0 (newest) to the bottom, so a growing
     // message and the keyboard opening keep the stream in view.
     LaunchedEffect(state.messages.size) { listState.scrollToItem(0) }
 
+    // Back closes the drawer first instead of leaving the app.
+    BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            SessionDrawer(
+                sessions = state.sessions,
+                currentId = state.currentSessionId,
+                onIntent = { intent ->
+                    onIntent(intent)
+                    if (intent !is ChatIntent.DeleteSession) scope.launch { drawerState.close() }
+                },
+            )
+        },
+    ) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -102,11 +132,17 @@ fun ChatContent(
                         onIntent(ChatIntent.SelectModel(it.id))
                     }
                 },
+                navigationIcon = {
+                    TextButton(
+                        onClick = { scope.launch { drawerState.open() } },
+                        colors = ButtonDefaults.textButtonColors(contentColor = LocalContentColor.current),
+                    ) { Text("☰", fontSize = 20.sp) }
+                },
                 actions = {
                     TextButton(
-                        onClick = { onIntent(ChatIntent.Clear) },
+                        onClick = { onIntent(ChatIntent.NewChat) },
                         colors = ButtonDefaults.textButtonColors(contentColor = LocalContentColor.current),
-                    ) { Text("Clear") }
+                    ) { Text("New") }
                 },
                 // Navy bar: primary in light mode; in dark mode primary is light blue, so use the navy container.
                 colors = if (isSystemInDarkTheme()) {
@@ -143,6 +179,79 @@ fun ChatContent(
                 onStop = { onIntent(ChatIntent.Stop) },
             )
         }
+    }
+    }
+}
+
+@Composable
+private fun SessionDrawer(sessions: List<ChatSession>, currentId: Long?, onIntent: (ChatIntent) -> Unit) {
+    var pendingDelete by remember { mutableStateOf<ChatSession?>(null) }
+
+    ModalDrawerSheet {
+        Text(
+            "Chats",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(start = 28.dp, top = 20.dp, bottom = 12.dp),
+        )
+        NavigationDrawerItem(
+            label = { Text("+  New chat") },
+            selected = currentId == null,
+            onClick = { onIntent(ChatIntent.NewChat) },
+            modifier = Modifier.padding(horizontal = 12.dp),
+        )
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        if (sessions.isEmpty()) {
+            Text(
+                "No saved chats yet",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.padding(horizontal = 28.dp),
+            )
+        }
+        LazyColumn {
+            items(sessions, key = { it.id }) { session ->
+                NavigationDrawerItem(
+                    label = {
+                        Column {
+                            Text(session.title.ifEmpty { "New chat" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                session.modelId.substringAfter('/'),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                maxLines = 1,
+                            )
+                        }
+                    },
+                    selected = session.id == currentId,
+                    onClick = { onIntent(ChatIntent.OpenSession(session.id)) },
+                    badge = {
+                        Text(
+                            "✕",
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier
+                                .clickable { pendingDelete = session }
+                                .padding(8.dp),
+                        )
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+            }
+        }
+    }
+
+    pendingDelete?.let { session ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete chat?") },
+            text = { Text("\"${session.title.ifEmpty { "New chat" }}\" and its messages will be removed from this device.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onIntent(ChatIntent.DeleteSession(session.id))
+                    pendingDelete = null
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } },
+        )
     }
 }
 

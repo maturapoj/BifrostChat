@@ -2,6 +2,7 @@ package com.example.bifrostchat.presentation.chat
 
 import com.example.bifrostchat.domain.model.Role
 import com.example.bifrostchat.domain.model.StreamEvent
+import com.example.bifrostchat.domain.model.StreamStats
 
 fun reduce(state: ChatState, result: ChatResult): ChatState = when (result) {
     is ChatResult.ModelsLoaded -> {
@@ -28,7 +29,18 @@ fun reduce(state: ChatState, result: ChatResult): ChatState = when (result) {
         .updateMessage(result.assistantId) { it.copy(isStreaming = false, error = result.error) }
         .copy(isStreaming = false)
 
-    ChatResult.Cleared -> state.copy(messages = emptyList(), isStreaming = false)
+    is ChatResult.SessionsUpdated -> state.copy(sessions = result.sessions)
+
+    is ChatResult.SessionCreated -> state.copy(currentSessionId = result.id)
+
+    is ChatResult.SessionOpened -> state.copy(
+        currentSessionId = result.id,
+        selectedModelId = result.modelId,
+        messages = result.messages,
+        isStreaming = false,
+    )
+
+    ChatResult.NewChatStarted -> state.copy(currentSessionId = null, messages = emptyList(), isStreaming = false)
 }
 
 private fun UiMessage.applyEvent(event: StreamEvent, elapsedMs: Long): UiMessage {
