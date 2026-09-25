@@ -3,6 +3,7 @@ package com.example.bifrostchat.presentation.chat
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,10 +19,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -33,6 +36,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.bifrostchat.domain.model.LlmModel
 import com.example.bifrostchat.domain.model.ModelGroup
 import com.example.bifrostchat.domain.model.Role
+import com.example.bifrostchat.presentation.theme.BifrostChatTheme
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -96,7 +101,26 @@ fun ChatContent(
                         onIntent(ChatIntent.SelectModel(it.id))
                     }
                 },
-                actions = { TextButton(onClick = { onIntent(ChatIntent.Clear) }) { Text("Clear") } },
+                actions = {
+                    TextButton(
+                        onClick = { onIntent(ChatIntent.Clear) },
+                        colors = ButtonDefaults.textButtonColors(contentColor = LocalContentColor.current),
+                    ) { Text("Clear") }
+                },
+                // Navy bar: primary in light mode; in dark mode primary is light blue, so use the navy container.
+                colors = if (isSystemInDarkTheme()) {
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                } else {
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    )
+                },
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -124,7 +148,7 @@ fun ChatContent(
 @Preview
 @Composable
 private fun ChatContentPreview() {
-    MaterialTheme {
+    BifrostChatTheme {
         ChatContent(
             state = ChatState(
                 modelGroups = listOf(
@@ -163,7 +187,7 @@ private fun ModelPicker(
                 style = MaterialTheme.typography.titleMedium,
             )
             selected?.let {
-                Text(it.provider, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                Text(it.provider, style = MaterialTheme.typography.labelSmall, color = LocalContentColor.current.copy(alpha = 0.7f))
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {

@@ -18,7 +18,7 @@ A Jetpack Compose chat client for experimenting with **LLM token streaming** on 
 It talks to any OpenAI-compatible gateway (`/v1/chat/completions` with `stream: true`)
 and renders the reply as it arrives: reasoning tokens and answer tokens appear separately.
 
-<img src="docs/screenshot.png" width="300" alt="Chat screen showing a collapsible reasoning block, a streamed answer, and a stats line with TTFT, token count and tok/s">
+<img src="docs/screenshot.png" width="300" alt="Chat screen in the navy dark theme showing a reasoning block, a streamed answer, and a stats line with TTFT, token count and tok/s">
 
 ## Features
 
@@ -83,6 +83,7 @@ layer only depends on the use cases.
 | presentation | [`chat/ChatReducer.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatReducer.kt) | Pure reducer, including stream stats |
 | presentation | [`chat/ChatViewModel.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatViewModel.kt) | Handles intents, calls use cases, dispatches results |
 | presentation | [`chat/CoalesceTokens.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/CoalesceTokens.kt) | Timer-based batching of token deltas for the UI |
+| presentation | [`theme/Theme.kt`](app/src/main/java/com/example/bifrostchat/presentation/theme/Theme.kt) | Navy light and dark color schemes |
 | presentation | [`chat/ChatScreen.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatScreen.kt) | `ChatScreen` (collects state and effects), stateless `ChatContent`, grouped model picker |
 | di | [`di/Modules.kt`](app/src/main/java/com/example/bifrostchat/di/Modules.kt) | Koin `dataModule`, `domainModule`, `presentationModule` |
 
