@@ -19,11 +19,9 @@ A Jetpack Compose chat client for experimenting with **LLM token streaming** on 
 It talks to any OpenAI-compatible gateway (`/v1/chat/completions` with `stream: true`)
 and renders the reply as it arrives: reasoning tokens and answer tokens appear separately.
 
-<p>
-  <img src="docs/demo.gif" width="300" alt="Recording of a reply streaming in: a Thinking block, then a bold intro, bullet points and a Kotlin code block with a Copy button">
-  &nbsp;
-  <img src="docs/screenshot.png" width="300" alt="Chat screen in the navy dark theme showing a reasoning block, a streamed answer, and a stats line with TTFT, token count and tok/s">
-</p>
+| Streaming | Chat history | Dark theme |
+| :---: | :---: | :---: |
+| <img src="docs/demo.gif" width="240" alt="Recording of a reply streaming in: a Thinking block, then a bold intro, bullet points and a Kotlin code block with a Copy button"> | <img src="docs/sessions.gif" width="240" alt="Recording of the chat drawer: switching to a saved chat, starting a new chat, and the new chat appearing at the top of the list"> | <img src="docs/screenshot.png" width="240" alt="Chat screen in the navy dark theme showing a reasoning block, a streamed answer, and a stats line"> |
 
 ## Features
 
@@ -35,8 +33,9 @@ and renders the reply as it arrives: reasoning tokens and answer tokens appear s
   and fenced code blocks with a language label, horizontal scrolling and a Copy button.
   Partial syntax mid-stream is handled: an unclosed fence renders as an open code block.
 - Shows stats under each reply: time to first token, number of UI updates, completion and reasoning tokens, total time, tok/s.
-- Saves chats on the device (Room). A drawer lists them newest first, titled after the first
-  message; each chat remembers its model, and the latest one reopens on launch.
+- Saves chats on the device (Room). The ☰ drawer lists them newest first, titled after the first
+  message; tap to reopen, ✕ to delete (with confirmation), **New** to start another. Each chat
+  remembers its model, and the latest one reopens on launch.
   Stopped or interrupted replies are saved with the text received so far.
 - Loads the model picker from `/v1/models`, grouped by provider (the `provider/` prefix of the id). Embedding models are hidden.
 
