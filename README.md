@@ -89,7 +89,7 @@ Then:
 > [!WARNING]
 > The API key is compiled into `BuildConfig`, so anyone who has the APK can extract it.
 > This is fine for local experiments. Do not distribute builds made with a real key;
-> a production app should call its own backend instead.
+> a production app should call its own backend instead. See [SECURITY.md](SECURITY.md).
 
 ## Stack
 
