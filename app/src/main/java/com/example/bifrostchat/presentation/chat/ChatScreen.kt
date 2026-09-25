@@ -1,6 +1,5 @@
 package com.example.bifrostchat.presentation.chat
 
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -18,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.bifrostchat.domain.model.LlmModel
 import com.example.bifrostchat.domain.model.ModelGroup
 import com.example.bifrostchat.domain.model.Role
+import com.example.bifrostchat.presentation.chat.markdown.MarkdownText
 import com.example.bifrostchat.presentation.theme.BifrostChatTheme
 import org.koin.androidx.compose.koinViewModel
 
@@ -160,7 +161,7 @@ private fun ChatContentPreview() {
                         id = 1,
                         role = Role.Assistant,
                         reasoning = "Rayleigh scattering.",
-                        content = "Air scatters short blue wavelengths more",
+                        content = "Air scatters **short** wavelengths more.\n\n```kotlin\nval sky = Color.Blue\n```",
                         isStreaming = true,
                         stats = StreamStats(timeToFirstTokenMs = 1200, chunks = 3),
                     ),
@@ -216,23 +217,36 @@ private fun MessageBubble(msg: UiMessage) {
     val isUser = msg.role == Role.User
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start) {
         Column(
-            Modifier
-                .widthIn(max = 340.dp)
+            // Assistant replies take the full width so code blocks have room.
+            (if (isUser) Modifier.widthIn(max = 340.dp) else Modifier.fillMaxWidth())
                 .background(
                     if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                     RoundedCornerShape(14.dp),
                 )
-                .padding(12.dp)
-                .animateContentSize(),
+                .padding(12.dp),
         ) {
-            if (msg.reasoning.isNotEmpty()) ReasoningBlock(msg.reasoning, stillThinking = msg.isStreaming && msg.content.isEmpty())
-
-            val cursor = if (msg.isStreaming) " ▍" else ""
-            if (msg.content.isNotEmpty() || (msg.isStreaming && msg.reasoning.isEmpty())) {
-                Text(msg.content + cursor)
+            if (isUser) {
+                Text(msg.content)
+            } else {
+                AssistantContent(msg)
             }
             msg.error?.let { Text("⚠ $it", color = MaterialTheme.colorScheme.error) }
             msg.stats?.let { StatsLine(it) }
+        }
+    }
+}
+
+@Composable
+private fun AssistantContent(msg: UiMessage) {
+    val reasoning = rememberSmoothReveal(msg.reasoning)
+    val content = rememberSmoothReveal(msg.content)
+    // Keep the cursor while revealed text is still catching up after the stream ends.
+    val typing = msg.isStreaming || content.length < msg.content.length
+
+    if (reasoning.isNotEmpty()) ReasoningBlock(reasoning, stillThinking = msg.isStreaming && msg.content.isEmpty())
+    if (content.isNotEmpty() || (typing && msg.reasoning.isEmpty())) {
+        SelectionContainer {
+            MarkdownText(content + if (typing) " ▍" else "")
         }
     }
 }

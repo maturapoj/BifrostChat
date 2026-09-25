@@ -18,13 +18,21 @@ A Jetpack Compose chat client for experimenting with **LLM token streaming** on 
 It talks to any OpenAI-compatible gateway (`/v1/chat/completions` with `stream: true`)
 and renders the reply as it arrives: reasoning tokens and answer tokens appear separately.
 
-<img src="docs/screenshot.png" width="300" alt="Chat screen in the navy dark theme showing a reasoning block, a streamed answer, and a stats line with TTFT, token count and tok/s">
+<p>
+  <img src="docs/demo.gif" width="300" alt="Recording of a reply streaming in: a Thinking block, then a bold intro, bullet points and a Kotlin code block with a Copy button">
+  &nbsp;
+  <img src="docs/screenshot.png" width="300" alt="Chat screen in the navy dark theme showing a reasoning block, a streamed answer, and a stats line with TTFT, token count and tok/s">
+</p>
 
 ## Features
 
 - Streams tokens over server-sent events. **Stop** cancels the stream and closes the HTTP connection.
 - Shows reasoning tokens (`delta.reasoning` / `delta.reasoning_content`) in a collapsible "Thinking…" block.
 - Batches UI updates (at most one every 50 ms) instead of recomposing once per chunk.
+- Reveals text at a steady, backlog-adaptive pace, so bursty delivery reads as smooth typing.
+- Renders Markdown in replies: headings, lists, quotes, **bold**, *italic*, `inline code`, links,
+  and fenced code blocks with a language label, horizontal scrolling and a Copy button.
+  Partial syntax mid-stream is handled: an unclosed fence renders as an open code block.
 - Shows stats under each reply: time to first token, number of UI updates, completion and reasoning tokens, total time, tok/s.
 - Loads the model picker from `/v1/models`, grouped by provider (the `provider/` prefix of the id). Embedding models are hidden.
 
@@ -39,6 +47,8 @@ OkHttp response body
                   └─ ChatViewModel  wraps each event as ChatResult.StreamEventReceived
                       └─ reduce()    pure (ChatState, ChatResult) → ChatState
                           └─ ChatContent  LazyColumn(reverseLayout = true) keeps the newest text in view
+                              └─ rememberSmoothReveal()  reveals the text at a steady pace
+                                  └─ MarkdownText        one Text per block; finished blocks skip recomposition
 ```
 
 ### MVI
@@ -84,6 +94,8 @@ layer only depends on the use cases.
 | presentation | [`chat/ChatViewModel.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatViewModel.kt) | Handles intents, calls use cases, dispatches results |
 | presentation | [`chat/CoalesceTokens.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/CoalesceTokens.kt) | Timer-based batching of token deltas for the UI |
 | presentation | [`theme/Theme.kt`](app/src/main/java/com/example/bifrostchat/presentation/theme/Theme.kt) | Navy light and dark color schemes |
+| presentation | [`chat/SmoothReveal.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/SmoothReveal.kt) | Frame-driven, backlog-adaptive text reveal |
+| presentation | [`chat/markdown/`](app/src/main/java/com/example/bifrostchat/presentation/chat/markdown) | Streaming-tolerant Markdown parser (blocks and inline) and `MarkdownText` renderer |
 | presentation | [`chat/ChatScreen.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatScreen.kt) | `ChatScreen` (collects state and effects), stateless `ChatContent`, grouped model picker |
 | di | [`di/Modules.kt`](app/src/main/java/com/example/bifrostchat/di/Modules.kt) | Koin `dataModule`, `domainModule`, `presentationModule` |
 
@@ -99,6 +111,14 @@ This affected two design choices:
   `Usage` and `Finished` flush the buffer first, then pass through.
 - **tok/s is measured over the whole request.** Measuring from first to last token gave
   values like 2,000+ tok/s, because a whole burst lands in a few milliseconds.
+
+**Smooth reveal hides the bursts.** The client can't make tokens arrive sooner, but it can
+spread each burst over time. `rememberSmoothReveal()` reveals at `max(80 chars/s, backlog / 0.5 s)`:
+big bursts drain quickly, short tails don't crawl. The frame loop only runs while there is
+a backlog, and text already present (after rotation or scrolling back) shows at once.
+
+**Markdown is rendered per block.** Each paragraph, list item or code block is its own `Text`,
+so while a reply streams only the last block re-lays out; finished blocks are skipped.
 
 **Auto-scroll uses `reverseLayout`.** Scrolling to the last item after each update missed
 the bottom when the message grew or the keyboard opened. A reversed list keeps index 0
@@ -124,7 +144,7 @@ Then:
 
 ```sh
 ./gradlew installDebug        # build and install on a device or emulator
-./gradlew testDebugUnitTest   # parser, repository, use case, reducer, ViewModel and Koin graph tests (no network)
+./gradlew testDebugUnitTest   # SSE and Markdown parsers, reveal pacing, repository, use case, reducer, ViewModel, Koin graph (no network)
 ```
 
 > [!WARNING]
