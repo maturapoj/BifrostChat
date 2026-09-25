@@ -1,5 +1,17 @@
 # BifrostChat
 
+[![CI](https://img.shields.io/github/actions/workflow/status/maturapoj/BifrostChat/ci.yml?branch=main&label=CI&logo=github)](https://github.com/maturapoj/BifrostChat/actions/workflows/ci.yml)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.2-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![UI](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/compose)
+[![Material 3](https://img.shields.io/badge/Design-Material%203-757575?logo=materialdesign&logoColor=white)](https://m3.material.io)
+[![Android Min SDK](https://img.shields.io/badge/Android%20Min%20SDK-26-3DDC84?logo=android&logoColor=white)](https://developer.android.com/about/versions/oreo)
+[![Target SDK](https://img.shields.io/badge/Target%20SDK-36-3DDC84?logo=android&logoColor=white)](https://developer.android.com/about/versions/16)
+[![Async](https://img.shields.io/badge/Async-Coroutines%20%2B%20Flow-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/docs/flow.html)
+[![HTTP](https://img.shields.io/badge/HTTP-OkHttp%204.12-3E8E41?logo=square&logoColor=white)](https://square.github.io/okhttp/)
+[![Streaming](https://img.shields.io/badge/Streaming-SSE-FF6F00)](https://developer.mozilla.org/docs/Web/API/Server-sent_events)
+[![API](https://img.shields.io/badge/API-OpenAI%20compatible-412991)](https://platform.openai.com/docs/api-reference/chat/streaming)
+[![License](https://img.shields.io/badge/License-MIT-C9A227)](LICENSE)
+
 A Jetpack Compose chat client for experimenting with **LLM token streaming** on Android.
 It talks to any OpenAI-compatible gateway (`/v1/chat/completions` with `stream: true`)
 and renders the reply as it arrives: reasoning tokens and answer tokens appear separately.
