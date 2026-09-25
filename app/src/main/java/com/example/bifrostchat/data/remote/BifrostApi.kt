@@ -1,5 +1,6 @@
-package com.example.bifrostchat.data
+package com.example.bifrostchat.data.remote
 
+import com.example.bifrostchat.domain.model.StreamEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -13,22 +14,18 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
 
-data class ChatMessage(val role: String, val content: String)
+/** Wire format of one OpenAI chat message (`role` is "user" / "assistant"). */
+data class MessageDto(val role: String, val content: String)
 
 /** Talks to the Bifrost gateway's OpenAI-compatible `/v1` endpoints. */
-class BifrostClient(
+class BifrostApi(
     private val baseUrl: String,
     private val apiKey: String,
-    private val http: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        // Reasoning models can pause a long time between chunks.
-        .readTimeout(5, TimeUnit.MINUTES)
-        .build(),
+    private val http: OkHttpClient,
 ) {
 
-    suspend fun listModels(): List<String> = withContext(Dispatchers.IO) {
+    suspend fun listModelIds(): List<String> = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url("$baseUrl/v1/models")
             .header("Authorization", "Bearer $apiKey")
@@ -37,7 +34,7 @@ class BifrostClient(
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw BifrostException("HTTP ${response.code}: $body")
             val data = JSONObject(body).getJSONArray("data")
-            List(data.length()) { data.getJSONObject(it).getString("id") }.sorted()
+            List(data.length()) { data.getJSONObject(it).getString("id") }
         }
     }
 
@@ -46,7 +43,7 @@ class BifrostClient(
      * so tokens reach the collector one chunk at a time. Cancelling the
      * collecting coroutine closes the HTTP connection.
      */
-    fun streamChat(model: String, messages: List<ChatMessage>): Flow<StreamEvent> = flow {
+    fun streamChat(model: String, messages: List<MessageDto>): Flow<StreamEvent> = flow {
         val body = JSONObject()
             .put("model", model)
             .put("stream", true)

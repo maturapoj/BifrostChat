@@ -1,4 +1,4 @@
-package com.example.bifrostchat.ui
+package com.example.bifrostchat.presentation.chat
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,10 +21,15 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -37,15 +43,45 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.bifrostchat.domain.model.LlmModel
+import com.example.bifrostchat.domain.model.ModelGroup
+import com.example.bifrostchat.domain.model.Role
+import org.koin.androidx.compose.koinViewModel
+
+@Composable
+fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+
+    LaunchedEffect(vm) {
+        vm.effects.collect { effect ->
+            when (effect) {
+                is ChatEffect.ModelsFailed -> {
+                    val result = snackbar.showSnackbar(
+                        message = "โหลด models ไม่ได้: ${effect.message}",
+                        actionLabel = "Retry",
+                        duration = SnackbarDuration.Indefinite,
+                    )
+                    if (result == SnackbarResult.ActionPerformed) vm.onIntent(ChatIntent.LoadModels)
+                }
+            }
+        }
+    }
+
+    ChatContent(state = state, snackbar = snackbar, onIntent = vm::onIntent)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(vm: ChatViewModel = viewModel()) {
-    val state by vm.state.collectAsStateWithLifecycle()
+fun ChatContent(
+    state: ChatState,
+    onIntent: (ChatIntent) -> Unit,
+    snackbar: SnackbarHostState = remember { SnackbarHostState() },
+) {
     val listState = rememberLazyListState()
 
     // reverseLayout anchors index 0 (newest) to the bottom, so a growing
@@ -55,46 +91,97 @@ fun ChatScreen(vm: ChatViewModel = viewModel()) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { ModelPicker(state.models, state.selectedModel, enabled = !state.isStreaming, onSelect = vm::selectModel) },
-                actions = { TextButton(onClick = vm::clear) { Text("Clear") } },
+                title = {
+                    ModelPicker(state.modelGroups, state.selectedModel, enabled = !state.isStreaming) {
+                        onIntent(ChatIntent.SelectModel(it.id))
+                    }
+                },
+                actions = { TextButton(onClick = { onIntent(ChatIntent.Clear) }) { Text("Clear") } },
             )
         },
+        snackbarHost = { SnackbarHost(snackbar) },
         modifier = Modifier.imePadding(),
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            state.error?.let {
-                Text(
-                    it,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(12.dp).clickable { vm.loadModels() },
-                )
-            }
             LazyColumn(
                 state = listState,
                 reverseLayout = true,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+                contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(state.messages.asReversed(), key = { it.id }) { MessageBubble(it) }
             }
-            InputBar(isStreaming = state.isStreaming, onSend = vm::send, onStop = vm::stop)
+            InputBar(
+                isStreaming = state.isStreaming,
+                onSend = { onIntent(ChatIntent.Send(it)) },
+                onStop = { onIntent(ChatIntent.Stop) },
+            )
         }
     }
 }
 
+@Preview
 @Composable
-private fun ModelPicker(models: List<String>, selected: String, enabled: Boolean, onSelect: (String) -> Unit) {
+private fun ChatContentPreview() {
+    MaterialTheme {
+        ChatContent(
+            state = ChatState(
+                modelGroups = listOf(
+                    ModelGroup("dashscope", listOf(LlmModel("dashscope/deepseek-v4-flash-0731", "dashscope", "deepseek-v4-flash-0731"))),
+                ),
+                messages = listOf(
+                    UiMessage(id = 0, role = Role.User, content = "Why is the sky blue?"),
+                    UiMessage(
+                        id = 1,
+                        role = Role.Assistant,
+                        reasoning = "Rayleigh scattering.",
+                        content = "Air scatters short blue wavelengths more",
+                        isStreaming = true,
+                        stats = StreamStats(timeToFirstTokenMs = 1200, chunks = 3),
+                    ),
+                ),
+                isStreaming = true,
+            ),
+            onIntent = {},
+        )
+    }
+}
+
+@Composable
+private fun ModelPicker(
+    groups: List<ModelGroup>,
+    selected: LlmModel?,
+    enabled: Boolean,
+    onSelect: (LlmModel) -> Unit,
+) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        Text(
-            text = (selected.ifEmpty { "Loading models…" }) + " ▾",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.clickable(enabled = enabled) { expanded = true },
-        )
+        Column(Modifier.clickable(enabled = enabled) { expanded = true }) {
+            Text(
+                text = (selected?.name ?: "Loading models…") + " ▾",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            selected?.let {
+                Text(it.provider, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+            }
+        }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            models.forEach { model ->
-                DropdownMenuItem(text = { Text(model) }, onClick = { onSelect(model); expanded = false })
+            groups.forEachIndexed { index, group ->
+                if (index > 0) HorizontalDivider()
+                Text(
+                    group.provider,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+                group.models.forEach { model ->
+                    DropdownMenuItem(
+                        text = { Text(model.name) },
+                        trailingIcon = { if (model.id == selected?.id) Text("✓") },
+                        onClick = { onSelect(model); expanded = false },
+                    )
+                }
             }
         }
     }
@@ -102,7 +189,7 @@ private fun ModelPicker(models: List<String>, selected: String, enabled: Boolean
 
 @Composable
 private fun MessageBubble(msg: UiMessage) {
-    val isUser = msg.role == "user"
+    val isUser = msg.role == Role.User
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start) {
         Column(
             Modifier

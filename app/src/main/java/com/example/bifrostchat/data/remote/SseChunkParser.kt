@@ -1,5 +1,6 @@
-package com.example.bifrostchat.data
+package com.example.bifrostchat.data.remote
 
+import com.example.bifrostchat.domain.model.StreamEvent
 import org.json.JSONObject
 
 /**

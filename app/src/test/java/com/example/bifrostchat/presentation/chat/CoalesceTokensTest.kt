@@ -1,5 +1,6 @@
-package com.example.bifrostchat.data
+package com.example.bifrostchat.presentation.chat
 
+import com.example.bifrostchat.domain.model.StreamEvent
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow

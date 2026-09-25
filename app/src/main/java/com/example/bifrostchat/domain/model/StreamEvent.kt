@@ -1,4 +1,4 @@
-package com.example.bifrostchat.data
+package com.example.bifrostchat.domain.model
 
 /** One decoded piece of an OpenAI-style `chat.completion.chunk` stream. */
 sealed interface StreamEvent {
