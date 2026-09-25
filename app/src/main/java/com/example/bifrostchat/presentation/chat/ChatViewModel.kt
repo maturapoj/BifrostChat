@@ -1,18 +1,21 @@
 package com.example.bifrostchat.presentation.chat
 
-import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bifrostchat.domain.model.ChatMessage
 import com.example.bifrostchat.domain.model.Role
-import com.example.bifrostchat.domain.usecase.CreateSessionUseCase
-import com.example.bifrostchat.domain.usecase.DeleteSessionUseCase
 import com.example.bifrostchat.domain.usecase.GetModelGroupsUseCase
-import com.example.bifrostchat.domain.usecase.LoadSessionUseCase
-import com.example.bifrostchat.domain.usecase.ObserveSessionsUseCase
-import com.example.bifrostchat.domain.usecase.SaveMessageUseCase
-import com.example.bifrostchat.domain.usecase.SetSessionModelUseCase
+import com.example.bifrostchat.domain.usecase.SessionUseCases
 import com.example.bifrostchat.domain.usecase.StreamChatUseCase
+import com.example.bifrostchat.presentation.chat.state.ChatEffect
+import com.example.bifrostchat.presentation.chat.state.ChatIntent
+import com.example.bifrostchat.presentation.chat.state.ChatResult
+import com.example.bifrostchat.presentation.chat.state.ChatState
+import com.example.bifrostchat.presentation.chat.state.UiMessage
+import com.example.bifrostchat.presentation.chat.state.reduce
+import com.example.bifrostchat.presentation.chat.state.toSessionMessage
+import com.example.bifrostchat.presentation.chat.state.toUi
+import com.example.bifrostchat.presentation.chat.streaming.coalesceTokens
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -22,26 +25,19 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectIndexed
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-/** Groups the session use cases so the ViewModel constructor stays readable. */
-class SessionUseCases(
-    val observe: ObserveSessionsUseCase,
-    val load: LoadSessionUseCase,
-    val create: CreateSessionUseCase,
-    val delete: DeleteSessionUseCase,
-    val saveMessage: SaveMessageUseCase,
-    val setModel: SetSessionModelUseCase,
-)
+import kotlin.time.TimeSource
 
 class ChatViewModel(
     private val getModelGroups: GetModelGroupsUseCase,
     private val streamChat: StreamChatUseCase,
     private val sessions: SessionUseCases,
-    private val clock: () -> Long = SystemClock::elapsedRealtime,
+    private val timeSource: TimeSource = TimeSource.Monotonic,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatState())
@@ -89,12 +85,10 @@ class ChatViewModel(
 
     private fun observeSessions() {
         viewModelScope.launch {
-            var first = true
-            sessions.observe().collect { list ->
+            sessions.observe().collectIndexed { index, list ->
                 dispatch(ChatResult.SessionsUpdated(list))
                 // Reopen the latest chat on launch, unless the user already started typing into a new one.
-                if (first && _state.value.messages.isEmpty()) list.firstOrNull()?.let { switchTo(it.id) }
-                first = false
+                if (index == 0 && _state.value.messages.isEmpty()) list.firstOrNull()?.let { switchTo(it.id) }
             }
         }
     }
@@ -153,7 +147,7 @@ class ChatViewModel(
         dispatch(ChatResult.StreamStarted(user, assistantId))
 
         streamJob = viewModelScope.launch {
-            val start = clock()
+            val start = timeSource.markNow()
             var error: String? = null
             var sessionId: Long? = null
             try {
@@ -162,7 +156,7 @@ class ChatViewModel(
                 sessions.saveMessage(sessionId, user.toSessionMessage())
 
                 streamChat(current.selectedModelId, history).coalesceTokens().collect { event ->
-                    dispatch(ChatResult.StreamEventReceived(assistantId, event, clock() - start))
+                    dispatch(ChatResult.StreamEventReceived(assistantId, event, start.elapsedNow()))
                 }
             } catch (e: CancellationException) {
                 throw e

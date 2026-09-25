@@ -12,16 +12,23 @@ import com.example.bifrostchat.domain.usecase.GetModelGroupsUseCase
 import com.example.bifrostchat.domain.usecase.LoadSessionUseCase
 import com.example.bifrostchat.domain.usecase.ObserveSessionsUseCase
 import com.example.bifrostchat.domain.usecase.SaveMessageUseCase
+import com.example.bifrostchat.domain.usecase.SessionUseCases
 import com.example.bifrostchat.domain.usecase.SetSessionModelUseCase
 import com.example.bifrostchat.domain.usecase.StreamChatUseCase
 import com.example.bifrostchat.fakes.FakeSessionRepository
+import com.example.bifrostchat.presentation.chat.state.ChatEffect
+import com.example.bifrostchat.presentation.chat.state.ChatIntent
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -68,7 +75,7 @@ class ChatViewModelTest {
                 SaveMessageUseCase(sessions),
                 SetSessionModelUseCase(sessions),
             ),
-            clock = { testScheduler.currentTime },
+            timeSource = testScheduler.timeSource,
         ).also { advanceUntilIdle() }
 
     private fun replying(vararg parts: String) = FakeChatRepository(stream = {
@@ -100,6 +107,26 @@ class ChatViewModelTest {
         assertEquals(listOf("hi", "Hello"), s.messages.map { it.content })
         assertFalse(s.isStreaming)
         assertEquals(listOf(ChatMessage(Role.User, "hi")), chat.lastHistory)
+    }
+
+    @Test fun `stream timing uses the injected time source`() = runTest(dispatcher) {
+        val vm = viewModel(FakeChatRepository(stream = {
+            flow {
+                delay(800)
+                emit(StreamEvent.Content("hi"))
+                delay(1_200)
+                emit(StreamEvent.Usage(1, 40, 0))
+            }
+        }))
+
+        vm.onIntent(ChatIntent.Send("q"))
+        advanceUntilIdle()
+
+        val stats = vm.state.value.messages.last().stats!!
+        // 800 ms to the first token plus the 50 ms coalescing window before it reaches state.
+        assertEquals(850.milliseconds, stats.timeToFirstToken)
+        assertEquals(2.seconds, stats.total)
+        assertEquals(20.0, stats.tokensPerSecond!!, 0.001)
     }
 
     @Test fun `stop cancels the stream and keeps partial text`() = runTest(dispatcher) {

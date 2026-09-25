@@ -46,5 +46,3 @@ object SseChunkParser {
     private fun JSONObject.optNonEmpty(key: String): String? =
         if (isNull(key)) null else optString(key).takeIf { it.isNotEmpty() }
 }
-
-class BifrostException(message: String) : Exception(message)

@@ -1,10 +1,14 @@
-package com.example.bifrostchat.presentation.chat
+package com.example.bifrostchat.presentation.chat.streaming
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.example.bifrostchat.domain.model.StreamEvent
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test

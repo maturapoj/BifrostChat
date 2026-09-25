@@ -58,15 +58,16 @@ OkHttp response body
 
 ```text
  ChatContent ──ChatIntent──▶ ChatViewModel.onIntent()
-      ▲                           │  side effects: network, stream job, clock
+      ▲                           │  side effects: network, stream job, TimeSource
       │                           ▼
   ChatState ◀──reduce()──── ChatResult
       ChatEffect (one-off, e.g. "models failed" → Snackbar with Retry)
 ```
 
-- **Intent:** `LoadModels`, `SelectModel`, `Send`, `Stop`, `Clear`. `onIntent()` is the only public entry point.
+- **Intent:** `LoadModels`, `SelectModel`, `Send`, `Stop`, `NewChat`, `OpenSession`, `DeleteSession`. `onIntent()` is the only public entry point.
 - **Result → reducer:** the ViewModel turns each event into a `ChatResult` and calls `reduce()`.
-  Timing is passed in as `elapsedMs`, so the reducer stays pure and can be unit tested without coroutines.
+  Timing is passed in as an `elapsed: Duration` (measured with an injected `TimeSource`), so the reducer
+  stays pure and can be unit tested without coroutines; ViewModel tests use the test scheduler's virtual time.
 - **State:** a single immutable `ChatState` exposed as a `StateFlow`.
 - **Effect:** one-off events go through a `Channel`, so they are not replayed on recomposition or rotation.
 - `ChatContent(state, onIntent)` is stateless, so it can be previewed and tested without a ViewModel.
@@ -95,14 +96,13 @@ layer only depends on the use cases.
 | data | [`local/ChatDatabase.kt`](app/src/main/java/com/example/bifrostchat/data/local/ChatDatabase.kt) | Room entities (`sessions`, `messages`) and DAO; schema exported to `app/schemas/` |
 | data | [`repository/SessionRepositoryImpl.kt`](app/src/main/java/com/example/bifrostchat/data/repository/SessionRepositoryImpl.kt) | Maps Room entities to domain sessions and messages |
 | data | [`repository/ChatRepositoryImpl.kt`](app/src/main/java/com/example/bifrostchat/data/repository/ChatRepositoryImpl.kt) | Maps DTOs and gateway ids (`provider/name`) to domain models |
-| presentation | [`chat/ChatContract.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatContract.kt) | `ChatState`, `ChatIntent`, `ChatEffect`, `ChatResult` |
-| presentation | [`chat/ChatReducer.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatReducer.kt) | Pure reducer, including stream stats |
+| presentation | [`chat/ChatScreen.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatScreen.kt) | `ChatScreen` (collects state and effects), stateless `ChatContent` with the drawer and top bar |
 | presentation | [`chat/ChatViewModel.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatViewModel.kt) | Handles intents, calls use cases, dispatches results |
-| presentation | [`chat/CoalesceTokens.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/CoalesceTokens.kt) | Timer-based batching of token deltas for the UI |
-| presentation | [`theme/Theme.kt`](app/src/main/java/com/example/bifrostchat/presentation/theme/Theme.kt) | Navy light and dark color schemes |
-| presentation | [`chat/SmoothReveal.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/SmoothReveal.kt) | Frame-driven, backlog-adaptive text reveal |
+| presentation | [`chat/state/`](app/src/main/java/com/example/bifrostchat/presentation/chat/state) | MVI contract (`ChatState`, `ChatIntent`, `ChatEffect`, `ChatResult`) and the pure reducer |
+| presentation | [`chat/components/`](app/src/main/java/com/example/bifrostchat/presentation/chat/components) | `SessionDrawer`, `ModelPicker`, `MessageBubble` (reasoning, stats), `InputBar` |
+| presentation | [`chat/streaming/`](app/src/main/java/com/example/bifrostchat/presentation/chat/streaming) | `coalesceTokens()` batching and `rememberSmoothReveal()` pacing |
 | presentation | [`chat/markdown/`](app/src/main/java/com/example/bifrostchat/presentation/chat/markdown) | Streaming-tolerant Markdown parser (blocks and inline) and `MarkdownText` renderer |
-| presentation | [`chat/ChatScreen.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatScreen.kt) | `ChatScreen` (collects state and effects), stateless `ChatContent`, grouped model picker |
+| presentation | [`theme/Theme.kt`](app/src/main/java/com/example/bifrostchat/presentation/theme/Theme.kt) | Navy light and dark color schemes |
 | di | [`di/Modules.kt`](app/src/main/java/com/example/bifrostchat/di/Modules.kt) | Koin `dataModule` (OkHttp, API, Room), `domainModule`, `presentationModule` |
 
 ## Notes from testing

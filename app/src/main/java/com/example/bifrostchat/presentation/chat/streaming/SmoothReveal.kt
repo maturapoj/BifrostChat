@@ -1,4 +1,4 @@
-package com.example.bifrostchat.presentation.chat
+package com.example.bifrostchat.presentation.chat.streaming
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -9,9 +9,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
-import kotlinx.coroutines.flow.first
 import kotlin.math.max
 import kotlin.math.min
+import kotlinx.coroutines.flow.first
 
 /** Never crawl slower than this, so a short tail doesn't trickle in. */
 internal const val MIN_CHARS_PER_SECOND = 80f

@@ -1,4 +1,4 @@
-package com.example.bifrostchat.presentation.chat
+package com.example.bifrostchat.presentation.chat.streaming
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

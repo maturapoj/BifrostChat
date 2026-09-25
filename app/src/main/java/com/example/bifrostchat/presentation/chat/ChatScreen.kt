@@ -1,44 +1,23 @@
 package com.example.bifrostchat.presentation.chat
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.NavigationDrawerItem
-import androidx.compose.material3.rememberDrawerState
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.text.style.TextOverflow
-import com.example.bifrostchat.domain.model.ChatSession
-import kotlinx.coroutines.launch
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -48,16 +27,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,8 +43,17 @@ import com.example.bifrostchat.domain.model.LlmModel
 import com.example.bifrostchat.domain.model.ModelGroup
 import com.example.bifrostchat.domain.model.Role
 import com.example.bifrostchat.domain.model.StreamStats
-import com.example.bifrostchat.presentation.chat.markdown.MarkdownText
+import com.example.bifrostchat.presentation.chat.components.InputBar
+import com.example.bifrostchat.presentation.chat.components.MessageBubble
+import com.example.bifrostchat.presentation.chat.components.ModelPicker
+import com.example.bifrostchat.presentation.chat.components.SessionDrawer
+import com.example.bifrostchat.presentation.chat.state.ChatEffect
+import com.example.bifrostchat.presentation.chat.state.ChatIntent
+import com.example.bifrostchat.presentation.chat.state.ChatState
+import com.example.bifrostchat.presentation.chat.state.UiMessage
 import com.example.bifrostchat.presentation.theme.BifrostChatTheme
+import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -183,78 +169,6 @@ fun ChatContent(
     }
 }
 
-@Composable
-private fun SessionDrawer(sessions: List<ChatSession>, currentId: Long?, onIntent: (ChatIntent) -> Unit) {
-    var pendingDelete by remember { mutableStateOf<ChatSession?>(null) }
-
-    ModalDrawerSheet {
-        Text(
-            "Chats",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(start = 28.dp, top = 20.dp, bottom = 12.dp),
-        )
-        NavigationDrawerItem(
-            label = { Text("+  New chat") },
-            selected = currentId == null,
-            onClick = { onIntent(ChatIntent.NewChat) },
-            modifier = Modifier.padding(horizontal = 12.dp),
-        )
-        HorizontalDivider(Modifier.padding(vertical = 8.dp))
-        if (sessions.isEmpty()) {
-            Text(
-                "No saved chats yet",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(horizontal = 28.dp),
-            )
-        }
-        LazyColumn {
-            items(sessions, key = { it.id }) { session ->
-                NavigationDrawerItem(
-                    label = {
-                        Column {
-                            Text(session.title.ifEmpty { "New chat" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(
-                                session.modelId.substringAfter('/'),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline,
-                                maxLines = 1,
-                            )
-                        }
-                    },
-                    selected = session.id == currentId,
-                    onClick = { onIntent(ChatIntent.OpenSession(session.id)) },
-                    badge = {
-                        Text(
-                            "✕",
-                            color = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier
-                                .clickable { pendingDelete = session }
-                                .padding(8.dp),
-                        )
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                )
-            }
-        }
-    }
-
-    pendingDelete?.let { session ->
-        AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text("Delete chat?") },
-            text = { Text("\"${session.title.ifEmpty { "New chat" }}\" and its messages will be removed from this device.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    onIntent(ChatIntent.DeleteSession(session.id))
-                    pendingDelete = null
-                }) { Text("Delete") }
-            },
-            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } },
-        )
-    }
-}
-
 @Preview
 @Composable
 private fun ChatContentPreview() {
@@ -272,150 +186,12 @@ private fun ChatContentPreview() {
                         reasoning = "Rayleigh scattering.",
                         content = "Air scatters **short** wavelengths more.\n\n```kotlin\nval sky = Color.Blue\n```",
                         isStreaming = true,
-                        stats = StreamStats(timeToFirstTokenMs = 1200, chunks = 3),
+                        stats = StreamStats(timeToFirstToken = 1_200.milliseconds, chunks = 3),
                     ),
                 ),
                 isStreaming = true,
             ),
             onIntent = {},
         )
-    }
-}
-
-@Composable
-private fun ModelPicker(
-    groups: List<ModelGroup>,
-    selected: LlmModel?,
-    enabled: Boolean,
-    onSelect: (LlmModel) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        Column(Modifier.clickable(enabled = enabled) { expanded = true }) {
-            Text(
-                text = (selected?.name ?: "Loading models…") + " ▾",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            selected?.let {
-                Text(it.provider, style = MaterialTheme.typography.labelSmall, color = LocalContentColor.current.copy(alpha = 0.7f))
-            }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            groups.forEachIndexed { index, group ->
-                if (index > 0) HorizontalDivider()
-                Text(
-                    group.provider,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                )
-                group.models.forEach { model ->
-                    DropdownMenuItem(
-                        text = { Text(model.name) },
-                        trailingIcon = { if (model.id == selected?.id) Text("✓") },
-                        onClick = { onSelect(model); expanded = false },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MessageBubble(msg: UiMessage) {
-    val isUser = msg.role == Role.User
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start) {
-        Column(
-            // Assistant replies take the full width so code blocks have room.
-            (if (isUser) Modifier.widthIn(max = 340.dp) else Modifier.fillMaxWidth())
-                .background(
-                    if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                    RoundedCornerShape(14.dp),
-                )
-                .padding(12.dp),
-        ) {
-            if (isUser) {
-                Text(msg.content)
-            } else {
-                AssistantContent(msg)
-            }
-            msg.error?.let { Text("⚠ $it", color = MaterialTheme.colorScheme.error) }
-            msg.stats?.let { StatsLine(it) }
-        }
-    }
-}
-
-@Composable
-private fun AssistantContent(msg: UiMessage) {
-    val reasoning = rememberSmoothReveal(msg.reasoning)
-    val content = rememberSmoothReveal(msg.content)
-    // Keep the cursor while revealed text is still catching up after the stream ends.
-    val typing = msg.isStreaming || content.length < msg.content.length
-
-    if (reasoning.isNotEmpty()) ReasoningBlock(reasoning, stillThinking = msg.isStreaming && msg.content.isEmpty())
-    if (content.isNotEmpty() || (typing && msg.reasoning.isEmpty())) {
-        SelectionContainer {
-            MarkdownText(content + if (typing) " ▍" else "")
-        }
-    }
-}
-
-@Composable
-private fun ReasoningBlock(text: String, stillThinking: Boolean) {
-    var expanded by rememberSaveable { mutableStateOf(true) }
-    Column(Modifier.padding(bottom = 6.dp)) {
-        Text(
-            (if (stillThinking) "Thinking…" else "Thought") + if (expanded) " ▴" else " ▾",
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.clickable { expanded = !expanded },
-        )
-        if (expanded) {
-            Text(
-                text,
-                fontStyle = FontStyle.Italic,
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatsLine(s: StreamStats) {
-    val parts = buildList {
-        s.timeToFirstTokenMs?.let { add("TTFT ${it}ms") }
-        add("${s.chunks} chunks")
-        s.completionTokens?.let { add("$it tok" + (s.reasoningTokens?.takeIf { r -> r > 0 }?.let { r -> " ($r think)" } ?: "")) }
-        s.totalMs?.let { add("total ${it}ms") }
-        s.tokensPerSecond?.let { add("%.1f tok/s".format(it)) }
-    }
-    Text(
-        parts.joinToString(" · "),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.outline,
-        modifier = Modifier.padding(top = 6.dp),
-    )
-}
-
-@Composable
-private fun InputBar(isStreaming: Boolean, onSend: (String) -> Unit, onStop: () -> Unit) {
-    var text by rememberSaveable { mutableStateOf("") }
-    Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it },
-            modifier = Modifier.weight(1f),
-            placeholder = { Text("Message") },
-            maxLines = 5,
-        )
-        if (isStreaming) {
-            OutlinedButton(onClick = onStop, modifier = Modifier.padding(start = 8.dp)) { Text("Stop") }
-        } else {
-            Button(
-                onClick = { onSend(text); text = "" },
-                enabled = text.isNotBlank(),
-                modifier = Modifier.padding(start = 8.dp),
-            ) { Text("Send") }
-        }
     }
 }

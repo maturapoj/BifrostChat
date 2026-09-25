@@ -4,17 +4,22 @@ import com.example.bifrostchat.data.local.ChatDao
 import com.example.bifrostchat.data.local.MessageEntity
 import com.example.bifrostchat.data.local.SessionEntity
 import com.example.bifrostchat.data.local.StatsEntity
+import com.example.bifrostchat.data.remote.roleFromWire
+import com.example.bifrostchat.data.remote.wire
 import com.example.bifrostchat.domain.model.ChatSession
 import com.example.bifrostchat.domain.model.Role
 import com.example.bifrostchat.domain.model.SessionMessage
 import com.example.bifrostchat.domain.model.StreamStats
 import com.example.bifrostchat.domain.repository.SessionRepository
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class SessionRepositoryImpl(
     private val dao: ChatDao,
-    private val now: () -> Long = System::currentTimeMillis,
+    private val clock: Clock = Clock.System,
 ) : SessionRepository {
 
     override fun observeSessions(): Flow<List<ChatSession>> =
@@ -23,7 +28,7 @@ class SessionRepositoryImpl(
     override suspend fun getSession(id: Long): ChatSession? = dao.session(id)?.toDomain()
 
     override suspend fun createSession(title: String, modelId: String): Long {
-        val time = now()
+        val time = clock.now().toEpochMilliseconds()
         return dao.insertSession(SessionEntity(title = title, modelId = modelId, createdAt = time, updatedAt = time))
     }
 
@@ -35,30 +40,33 @@ class SessionRepositoryImpl(
         dao.messages(sessionId).map { it.toDomain() }
 
     override suspend fun addMessage(sessionId: Long, message: SessionMessage): Long =
-        dao.addMessage(message.toEntity(sessionId, now()))
+        dao.addMessage(message.toEntity(sessionId, clock.now().toEpochMilliseconds()))
 }
 
-private fun SessionEntity.toDomain() = ChatSession(id, title, modelId, updatedAt)
+private fun SessionEntity.toDomain() = ChatSession(id, title, modelId, Instant.fromEpochMilliseconds(updatedAt))
 
 private fun MessageEntity.toDomain() = SessionMessage(
     id = id,
-    role = if (role == "user") Role.User else Role.Assistant,
+    role = roleFromWire(role),
     content = content,
     reasoning = reasoning,
     error = error,
     stats = stats?.let {
-        StreamStats(it.timeToFirstTokenMs, it.chunks ?: 0, it.completionTokens, it.reasoningTokens, it.totalMs, it.tokensPerSecond)
+        StreamStats(it.timeToFirstTokenMs?.milliseconds, it.chunks ?: 0, it.completionTokens, it.reasoningTokens, it.totalMs?.milliseconds, it.tokensPerSecond)
     },
 )
 
 private fun SessionMessage.toEntity(sessionId: Long, time: Long) = MessageEntity(
     sessionId = sessionId,
-    role = if (role == Role.User) "user" else "assistant",
+    role = role.wire,
     content = content,
     reasoning = reasoning,
     error = error,
     stats = stats?.let {
-        StatsEntity(it.timeToFirstTokenMs, it.chunks, it.completionTokens, it.reasoningTokens, it.totalMs, it.tokensPerSecond)
+        StatsEntity(
+            it.timeToFirstToken?.inWholeMilliseconds, it.chunks, it.completionTokens, it.reasoningTokens,
+            it.total?.inWholeMilliseconds, it.tokensPerSecond,
+        )
     },
     createdAt = time,
 )

@@ -1,10 +1,12 @@
 package com.example.bifrostchat.domain.model
+import kotlin.time.Duration
+import kotlin.time.Instant
 
 data class ChatSession(
     val id: Long,
     val title: String,
     val modelId: String,
-    val updatedAt: Long,
+    val updatedAt: Instant,
 )
 
 /** A message as stored in a session. */
@@ -18,12 +20,12 @@ data class SessionMessage(
 )
 
 data class StreamStats(
-    val timeToFirstTokenMs: Long? = null,
+    val timeToFirstToken: Duration? = null,
     /** UI updates after coalescing, not raw SSE chunks. */
     val chunks: Int = 0,
     val completionTokens: Int? = null,
     val reasoningTokens: Int? = null,
-    val totalMs: Long? = null,
+    val total: Duration? = null,
     /** completion tokens / whole request time; the gateway delivers chunks in bursts, so per-chunk timing is meaningless. */
     val tokensPerSecond: Double? = null,
 )

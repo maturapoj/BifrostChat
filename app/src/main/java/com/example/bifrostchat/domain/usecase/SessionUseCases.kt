@@ -52,3 +52,13 @@ class SaveMessageUseCase(private val repository: SessionRepository) {
         }
     }
 }
+
+/** Groups the session use cases so the ViewModel constructor stays readable. */
+class SessionUseCases(
+    val observe: ObserveSessionsUseCase,
+    val load: LoadSessionUseCase,
+    val create: CreateSessionUseCase,
+    val delete: DeleteSessionUseCase,
+    val saveMessage: SaveMessageUseCase,
+    val setModel: SetSessionModelUseCase,
+)

@@ -3,6 +3,7 @@ package com.example.bifrostchat.fakes
 import com.example.bifrostchat.domain.model.ChatSession
 import com.example.bifrostchat.domain.model.SessionMessage
 import com.example.bifrostchat.domain.repository.SessionRepository
+import kotlin.time.Instant
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +22,7 @@ class FakeSessionRepository : SessionRepository {
 
     fun seed(title: String, modelId: String, vararg msgs: SessionMessage): Long {
         val id = nextSessionId++
-        sessions.value += id to ChatSession(id, title, modelId, ++time)
+        sessions.value += id to ChatSession(id, title, modelId, tick())
         messages[id] = msgs.map { it.copy(id = nextMessageId++) }.toMutableList()
         return id
     }
@@ -33,7 +34,7 @@ class FakeSessionRepository : SessionRepository {
 
     override suspend fun createSession(title: String, modelId: String): Long {
         val id = nextSessionId++
-        sessions.value += id to ChatSession(id, title, modelId, ++time)
+        sessions.value += id to ChatSession(id, title, modelId, tick())
         messages[id] = mutableListOf()
         return id
     }
@@ -54,9 +55,11 @@ class FakeSessionRepository : SessionRepository {
     override suspend fun addMessage(sessionId: Long, message: SessionMessage): Long {
         val id = nextMessageId++
         messages.getValue(sessionId) += message.copy(id = id)
-        update(sessionId) { it.copy(updatedAt = ++time) }
+        update(sessionId) { it.copy(updatedAt = tick()) }
         return id
     }
+
+    private fun tick() = Instant.fromEpochMilliseconds(++time)
 
     private fun update(id: Long, transform: (ChatSession) -> ChatSession) {
         sessions.value[id]?.let { sessions.value += id to transform(it) }

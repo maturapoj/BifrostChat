@@ -1,4 +1,4 @@
-package com.example.bifrostchat.presentation.chat
+package com.example.bifrostchat.presentation.chat.state
 
 import com.example.bifrostchat.domain.model.ChatSession
 import com.example.bifrostchat.domain.model.LlmModel
@@ -7,6 +7,7 @@ import com.example.bifrostchat.domain.model.Role
 import com.example.bifrostchat.domain.model.SessionMessage
 import com.example.bifrostchat.domain.model.StreamEvent
 import com.example.bifrostchat.domain.model.StreamStats
+import kotlin.time.Duration
 
 data class ChatState(
     val modelGroups: List<ModelGroup> = emptyList(),
@@ -56,7 +57,7 @@ sealed interface ChatResult {
     data class ModelsLoaded(val groups: List<ModelGroup>) : ChatResult
     data class ModelSelected(val modelId: String) : ChatResult
     data class StreamStarted(val user: UiMessage, val assistantId: Long) : ChatResult
-    data class StreamEventReceived(val assistantId: Long, val event: StreamEvent, val elapsedMs: Long) : ChatResult
+    data class StreamEventReceived(val assistantId: Long, val event: StreamEvent, val elapsed: Duration) : ChatResult
     data class StreamEnded(val assistantId: Long, val error: String?) : ChatResult
     data class SessionsUpdated(val sessions: List<ChatSession>) : ChatResult
     data class SessionCreated(val id: Long) : ChatResult

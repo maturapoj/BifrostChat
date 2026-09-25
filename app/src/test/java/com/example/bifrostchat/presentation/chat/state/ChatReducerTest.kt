@@ -1,9 +1,12 @@
-package com.example.bifrostchat.presentation.chat
+package com.example.bifrostchat.presentation.chat.state
 
 import com.example.bifrostchat.domain.model.LlmModel
 import com.example.bifrostchat.domain.model.ModelGroup
 import com.example.bifrostchat.domain.model.Role
 import com.example.bifrostchat.domain.model.StreamEvent
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -25,19 +28,19 @@ class ChatReducerTest {
 
     @Test fun `tokens append per channel and first token sets TTFT once`() {
         val s = streaming.after(
-            ChatResult.StreamEventReceived(1, StreamEvent.Reasoning("think"), elapsedMs = 800),
-            ChatResult.StreamEventReceived(1, StreamEvent.Content("Hel"), elapsedMs = 900),
-            ChatResult.StreamEventReceived(1, StreamEvent.Content("lo"), elapsedMs = 950),
+            ChatResult.StreamEventReceived(1, StreamEvent.Reasoning("think"), elapsed = 800.milliseconds),
+            ChatResult.StreamEventReceived(1, StreamEvent.Content("Hel"), elapsed = 900.milliseconds),
+            ChatResult.StreamEventReceived(1, StreamEvent.Content("lo"), elapsed = 950.milliseconds),
         )
         val msg = s.assistant()
         assertEquals("think", msg.reasoning)
         assertEquals("Hello", msg.content)
-        assertEquals(800L, msg.stats?.timeToFirstTokenMs)
+        assertEquals(800.milliseconds, msg.stats?.timeToFirstToken)
         assertEquals(3, msg.stats?.chunks)
     }
 
     @Test fun `usage sets tokens per second over whole request`() {
-        val s = streaming.after(ChatResult.StreamEventReceived(1, StreamEvent.Usage(10, 100, 20), elapsedMs = 2_000))
+        val s = streaming.after(ChatResult.StreamEventReceived(1, StreamEvent.Usage(10, 100, 20), elapsed = 2.seconds))
         val stats = s.assistant().stats!!
         assertEquals(100, stats.completionTokens)
         assertEquals(20, stats.reasoningTokens)

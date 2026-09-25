@@ -14,10 +14,10 @@ import com.example.bifrostchat.domain.usecase.GetModelGroupsUseCase
 import com.example.bifrostchat.domain.usecase.LoadSessionUseCase
 import com.example.bifrostchat.domain.usecase.ObserveSessionsUseCase
 import com.example.bifrostchat.domain.usecase.SaveMessageUseCase
+import com.example.bifrostchat.domain.usecase.SessionUseCases
 import com.example.bifrostchat.domain.usecase.SetSessionModelUseCase
 import com.example.bifrostchat.domain.usecase.StreamChatUseCase
 import com.example.bifrostchat.presentation.chat.ChatViewModel
-import com.example.bifrostchat.presentation.chat.SessionUseCases
 import org.koin.android.ext.koin.androidContext
 import okhttp3.OkHttpClient
 import org.koin.core.module.dsl.factoryOf
@@ -56,7 +56,7 @@ val domainModule = module {
 }
 
 val presentationModule = module {
-    // Lambda instead of viewModelOf so the `clock` default is used.
+    // Lambda instead of viewModelOf so the `timeSource` default is used.
     viewModel { ChatViewModel(get(), get(), get()) }
 }
 

@@ -1,4 +1,4 @@
-package com.example.bifrostchat.presentation.chat
+package com.example.bifrostchat.presentation.chat.streaming
 
 import com.example.bifrostchat.domain.model.StreamEvent
 import kotlinx.coroutines.Job

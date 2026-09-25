@@ -43,6 +43,10 @@ android {
 
 kotlin {
     jvmToolchain(17)
+    compilerOptions {
+        // kotlin.time.Clock / Instant are still experimental in Kotlin 2.2.
+        optIn.add("kotlin.time.ExperimentalTime")
+    }
 }
 
 room {

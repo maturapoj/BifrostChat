@@ -8,6 +8,10 @@ import com.example.bifrostchat.data.repository.SessionRepositoryImpl
 import com.example.bifrostchat.domain.model.Role
 import com.example.bifrostchat.domain.model.SessionMessage
 import com.example.bifrostchat.domain.model.StreamStats
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -24,18 +28,22 @@ class SessionRepositoryImplTest {
 
     private lateinit var db: ChatDatabase
     private lateinit var repo: SessionRepositoryImpl
-    private var time = 0L
+    /** Ticks one millisecond per call so ordering by updatedAt is deterministic. */
+    private val clock = object : Clock {
+        private var time = 0L
+        override fun now() = Instant.fromEpochMilliseconds(++time)
+    }
 
     @Before fun setUp() {
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), ChatDatabase::class.java).build()
-        repo = SessionRepositoryImpl(db.chatDao(), now = { ++time })
+        repo = SessionRepositoryImpl(db.chatDao(), clock)
     }
 
     @After fun tearDown() = db.close()
 
     @Test fun messagesRoundTripWithAndWithoutStats() = runTest {
         val id = repo.createSession("", "p/m")
-        val stats = StreamStats(timeToFirstTokenMs = 900, chunks = 4, completionTokens = 50, reasoningTokens = 10, totalMs = 2000, tokensPerSecond = 25.0)
+        val stats = StreamStats(timeToFirstToken = 900.milliseconds, chunks = 4, completionTokens = 50, reasoningTokens = 10, total = 2.seconds, tokensPerSecond = 25.0)
         repo.addMessage(id, SessionMessage(0, Role.User, "q"))
         repo.addMessage(id, SessionMessage(0, Role.Assistant, "a", reasoning = "think", stats = stats))
         repo.addMessage(id, SessionMessage(0, Role.Assistant, "", error = "HTTP 500"))
