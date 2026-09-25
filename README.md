@@ -82,3 +82,7 @@ Then:
 ## Stack
 
 Kotlin 2.2 · Jetpack Compose (BOM 2026.02) · Material 3 · Coroutines/Flow · OkHttp 4.12 · `org.json`
+
+## License
+
+[MIT](LICENSE)
