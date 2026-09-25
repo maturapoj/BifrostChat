@@ -2,11 +2,10 @@ package com.example.bifrostchat.data.remote
 
 import com.example.bifrostchat.domain.model.StreamEvent
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -14,6 +13,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 
 /** Wire format of one OpenAI chat message (`role` is "user" / "assistant"). */
 data class MessageDto(val role: String, val content: String)
@@ -40,10 +40,14 @@ class BifrostApi(
 
     /**
      * Streams a chat completion. Each SSE line is read as soon as it arrives,
-     * so tokens reach the collector one chunk at a time. Cancelling the
-     * collecting coroutine closes the HTTP connection.
+     * so tokens reach the collector one chunk at a time.
+     *
+     * The blocking socket read runs in a child coroutine, and [awaitClose] cancels the
+     * call as soon as the collector is cancelled. Closing the socket unblocks the read,
+     * so Stop takes effect immediately instead of waiting for the next chunk (or the
+     * read timeout, if the server has gone quiet).
      */
-    fun streamChat(model: String, messages: List<MessageDto>): Flow<StreamEvent> = flow {
+    fun streamChat(model: String, messages: List<MessageDto>): Flow<StreamEvent> = channelFlow {
         val body = JSONObject()
             .put("model", model)
             .put("stream", true)
@@ -61,21 +65,25 @@ class BifrostApi(
             .build()
 
         val call = http.newCall(request)
-        try {
-            call.execute().use { response ->
-                if (!response.isSuccessful) {
-                    throw BifrostException("HTTP ${response.code}: ${response.body?.string().orEmpty()}")
+        launch(Dispatchers.IO) {
+            try {
+                call.execute().use { response ->
+                    if (!response.isSuccessful) {
+                        throw BifrostException("HTTP ${response.code}: ${response.body?.string().orEmpty()}")
+                    }
+                    val source = response.body!!.source()
+                    while (true) {
+                        val line = source.readUtf8Line() ?: break
+                        val events = SseChunkParser.parseLine(line) ?: break
+                        events.forEach { send(it) }
+                    }
                 }
-                val source = response.body!!.source()
-                while (true) {
-                    currentCoroutineContext().ensureActive()
-                    val line = source.readUtf8Line() ?: break
-                    val events = SseChunkParser.parseLine(line) ?: break
-                    events.forEach { emit(it) }
-                }
+            } catch (e: IOException) {
+                // "Socket closed" after awaitClose cancelled the call is expected, not a failure.
+                if (!call.isCanceled()) throw e
             }
-        } finally {
-            call.cancel() // no-op if finished; aborts the socket if the collector was cancelled
+            channel.close()
         }
-    }.flowOn(Dispatchers.IO)
+        awaitClose { call.cancel() }
+    }
 }

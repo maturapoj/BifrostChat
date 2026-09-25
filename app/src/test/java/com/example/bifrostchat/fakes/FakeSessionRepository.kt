@@ -3,6 +3,7 @@ package com.example.bifrostchat.fakes
 import com.example.bifrostchat.domain.model.ChatSession
 import com.example.bifrostchat.domain.model.SessionMessage
 import com.example.bifrostchat.domain.repository.SessionRepository
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -14,6 +15,9 @@ class FakeSessionRepository : SessionRepository {
     private var nextMessageId = 1L
     private val sessions = MutableStateFlow<Map<Long, ChatSession>>(emptyMap())
     val messages = mutableMapOf<Long, MutableList<SessionMessage>>()
+
+    /** When set, getMessages suspends until it completes, to simulate a slow load. */
+    var loadGate: CompletableDeferred<Unit>? = null
 
     fun seed(title: String, modelId: String, vararg msgs: SessionMessage): Long {
         val id = nextSessionId++
@@ -42,7 +46,10 @@ class FakeSessionRepository : SessionRepository {
         messages.remove(id)
     }
 
-    override suspend fun getMessages(sessionId: Long) = messages[sessionId].orEmpty().toList()
+    override suspend fun getMessages(sessionId: Long): List<SessionMessage> {
+        loadGate?.await()
+        return messages[sessionId].orEmpty().toList()
+    }
 
     override suspend fun addMessage(sessionId: Long, message: SessionMessage): Long {
         val id = nextMessageId++

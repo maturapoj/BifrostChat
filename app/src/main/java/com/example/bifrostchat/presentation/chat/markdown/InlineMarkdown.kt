@@ -66,7 +66,10 @@ private fun AnnotatedString.Builder.appendInline(s: String, code: SpanStyle, lin
         }
 
         if (c == '[') {
-            val mid = s.indexOf("](", i + 1)
+            // The label ends at the first `]`; it only makes a link if `(` follows right away,
+            // so `arr[0] … [docs](url)` doesn't pull "0] … [docs" into the label.
+            val close = s.indexOf(']', i + 1)
+            val mid = if (close > 0 && s.startsWith("](", close)) close else -1
             val end = if (mid > 0) s.indexOf(')', mid + 2) else -1
             if (end > 0 && '\n' !in s.substring(i, end)) {
                 flush()

@@ -49,4 +49,16 @@ class InlineMarkdownTest {
         assertEquals("https://example.com", (url.item as LinkAnnotation.Url).url)
         assertEquals("docs", result.text.substring(url.start, url.end))
     }
+
+    @Test fun `stray bracket before a link does not swallow text`() {
+        val result = render("use arr[0] or see [docs](https://example.com)")
+        assertEquals("use arr[0] or see docs", result.text)
+        val url = result.getLinkAnnotations(0, result.length).single()
+        assertEquals("docs", result.text.substring(url.start, url.end))
+    }
+
+    @Test fun `brackets without a url stay literal`() {
+        assertEquals("[x] done", render("[x] done").text)
+        assertTrue(render("[x] done").getLinkAnnotations(0, 8).isEmpty())
+    }
 }

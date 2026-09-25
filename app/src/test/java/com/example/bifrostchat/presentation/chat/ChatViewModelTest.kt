@@ -15,6 +15,7 @@ import com.example.bifrostchat.domain.usecase.SaveMessageUseCase
 import com.example.bifrostchat.domain.usecase.SetSessionModelUseCase
 import com.example.bifrostchat.domain.usecase.StreamChatUseCase
 import com.example.bifrostchat.fakes.FakeSessionRepository
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -221,6 +222,30 @@ class ChatViewModelTest {
         assertEquals(other, vm.state.value.currentSessionId)
         assertEquals(listOf("x"), vm.state.value.messages.map { it.content })
         assertEquals(listOf("q", "half"), sessions.messages.getValue(first).map { it.content })
+    }
+
+    @Test fun `send is ignored while another session is still loading`() = runTest(dispatcher) {
+        val sessions = FakeSessionRepository()
+        val other = sessions.seed("other", "p/m1", SessionMessage(0, Role.User, "x"))
+        val chat = FakeChatRepository(stream = { flow { awaitCancellation() } })
+        val vm = viewModel(chat, sessions)
+        vm.onIntent(ChatIntent.NewChat)
+        advanceUntilIdle()
+
+        val gate = CompletableDeferred<Unit>()
+        sessions.loadGate = gate
+        vm.onIntent(ChatIntent.OpenSession(other))
+        advanceUntilIdle() // load is now suspended
+        vm.onIntent(ChatIntent.Send("too early"))
+        advanceUntilIdle()
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        val s = vm.state.value
+        assertEquals(other, s.currentSessionId)
+        assertEquals(listOf("x"), s.messages.map { it.content })
+        assertFalse(s.isStreaming)
+        assertTrue(chat.lastHistory.isEmpty()) // no stream was started
     }
 
     @Test fun `deleting the open session starts a new chat`() = runTest(dispatcher) {

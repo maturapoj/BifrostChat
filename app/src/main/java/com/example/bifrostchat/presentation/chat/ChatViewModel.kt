@@ -51,6 +51,9 @@ class ChatViewModel(
     val effects: Flow<ChatEffect> = _effects.receiveAsFlow()
 
     private var streamJob: Job? = null
+
+    /** Latest queued chat switch or delete; see [runSessionChange]. */
+    private var switchJob: Job? = null
     private var nextId = 0L
 
     init {
@@ -101,33 +104,45 @@ class ChatViewModel(
         _state.value.currentSessionId?.let { id -> viewModelScope.launch { sessions.setModel(id, modelId) } }
     }
 
-    /** Opens a saved session, or a new unsaved chat when [id] is null. A running stream is stopped (and saved) first. */
-    private fun switchTo(id: Long?) {
-        viewModelScope.launch {
-            streamJob?.cancelAndJoin()
-            if (id == null) {
-                dispatch(ChatResult.NewChatStarted)
-                return@launch
-            }
-            val loaded = sessions.load(id) ?: return@launch
-            nextId = (loaded.messages.maxOfOrNull { it.id } ?: 0) + 1
-            dispatch(ChatResult.SessionOpened(id, loaded.session.modelId, loaded.messages.map { it.toUi() }))
+    /** Opens a saved session, or a new unsaved chat when [id] is null. */
+    private fun switchTo(id: Long?) = runSessionChange {
+        if (id == null) {
+            dispatch(ChatResult.NewChatStarted)
+            return@runSessionChange
         }
+        val loaded = sessions.load(id) ?: return@runSessionChange
+        nextId = (loaded.messages.maxOfOrNull { it.id } ?: 0) + 1
+        dispatch(ChatResult.SessionOpened(id, loaded.session.modelId, loaded.messages.map { it.toUi() }))
     }
 
     private fun deleteSession(id: Long) {
-        viewModelScope.launch {
-            if (id == _state.value.currentSessionId) {
-                streamJob?.cancelAndJoin()
-                dispatch(ChatResult.NewChatStarted)
-            }
+        if (id != _state.value.currentSessionId) {
+            viewModelScope.launch { sessions.delete(id) }
+            return
+        }
+        runSessionChange {
+            dispatch(ChatResult.NewChatStarted)
             sessions.delete(id)
+        }
+    }
+
+    /**
+     * Runs a chat switch or delete after stopping (and saving) any running stream.
+     * Changes are queued rather than cancelled, so a delete always finishes and the
+     * reply is saved before its session can be removed. [send] is ignored while one runs.
+     */
+    private fun runSessionChange(block: suspend () -> Unit) {
+        val previous = switchJob
+        switchJob = viewModelScope.launch {
+            previous?.join()
+            streamJob?.cancelAndJoin()
+            block()
         }
     }
 
     private fun send(text: String) {
         val current = _state.value
-        if (text.isBlank() || current.isStreaming) return
+        if (text.isBlank() || current.isStreaming || switchJob?.isActive == true) return
 
         val user = UiMessage(id = nextId++, role = Role.User, content = text.trim())
         val assistantId = nextId++
