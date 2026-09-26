@@ -1,0 +1,47 @@
+name: Release
+
+# Push a tag like v1.0.0 to build a signed release APK and attach it to a GitHub Release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the release and upload the APK
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.TOKENFLOW_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::Add the TOKENFLOW_KEYSTORE_* secrets (see CONTRIBUTING.md) before tagging a release."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+
+      - name: Build signed release APK
+        env:
+          TOKENFLOW_KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
+          TOKENFLOW_KEYSTORE_PASSWORD: ${{ secrets.TOKENFLOW_KEYSTORE_PASSWORD }}
+          TOKENFLOW_KEY_ALIAS: ${{ secrets.TOKENFLOW_KEY_ALIAS }}
+          TOKENFLOW_KEY_PASSWORD: ${{ secrets.TOKENFLOW_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "TokenFlow-${GITHUB_REF_NAME}.apk"
+
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          files: TokenFlow-*.apk
+          generate_release_notes: true

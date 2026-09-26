@@ -15,22 +15,46 @@ val localProps = Properties().apply {
 }
 
 android {
-    namespace = "com.example.bifrostchat"
+    namespace = "io.github.maturapoj.tokenflow"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.bifrostchat"
+        applicationId = "io.github.maturapoj.tokenflow"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
-
-        buildConfigField("String", "BIFROST_BASE_URL", "\"${localProps.getProperty("bifrost.baseUrl", "")}\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
 
-        buildConfigField("String", "BIFROST_API_KEY", "\"${localProps.getProperty("bifrost.apiKey", "")}\"")
-        // Optional; when empty the first model from /v1/models is selected.
-        buildConfigField("String", "BIFROST_DEFAULT_MODEL", "\"${localProps.getProperty("bifrost.defaultModel", "")}\"")
+    // Release signing comes from the environment (CI secrets); without it, release builds are unsigned.
+    val keystorePath: String? = System.getenv("TOKENFLOW_KEYSTORE_PATH")
+    signingConfigs {
+        if (keystorePath != null) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("TOKENFLOW_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("TOKENFLOW_KEY_ALIAS")
+                keyPassword = System.getenv("TOKENFLOW_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        // Debug builds may preload an endpoint from local.properties so development needs no typing.
+        // Release builds never embed one: users enter it in Settings, so no key ships in the APK.
+        debug {
+            buildConfigField("String", "DEFAULT_BASE_URL", "\"${localProps.getProperty("tokenflow.baseUrl", "")}\"")
+            buildConfigField("String", "DEFAULT_API_KEY", "\"${localProps.getProperty("tokenflow.apiKey", "")}\"")
+        }
+        release {
+            buildConfigField("String", "DEFAULT_BASE_URL", "\"\"")
+            buildConfigField("String", "DEFAULT_API_KEY", "\"\"")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (keystorePath != null) signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     buildFeatures {
@@ -64,6 +88,7 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.activity:activity-compose:1.10.1")
@@ -73,6 +98,7 @@ dependencies {
     implementation("io.insert-koin:koin-android:4.1.0")
     implementation("io.insert-koin:koin-androidx-compose:4.1.0")
 
+    implementation("androidx.datastore:datastore-preferences:1.1.7")
     implementation("androidx.room:room-runtime:2.8.4")
     implementation("androidx.room:room-ktx:2.8.4")
     ksp("androidx.room:room-compiler:2.8.4")
@@ -89,5 +115,7 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.room:room-testing:2.8.4")
+    androidTestImplementation(composeBom)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
 }

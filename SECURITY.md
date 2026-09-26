@@ -3,16 +3,17 @@
 ## Reporting a vulnerability
 
 Please report security issues privately via
-[GitHub private vulnerability reporting](https://github.com/maturapoj/BifrostChat/security/advisories/new)
+[GitHub private vulnerability reporting](https://github.com/maturapoj/TokenFlow/security/advisories/new)
 rather than opening a public issue.
 
-## Handling of the API key
+## How the API key is handled
 
-- The key is read from `local.properties`, which is gitignored and never committed.
-- It is compiled into `BuildConfig`, so it can be extracted from any APK built with it.
-  Treat debug builds as secret and do not distribute them. A production app should
-  proxy requests through its own backend instead of shipping a key.
-- The app only allows HTTPS (`network_security_config.xml`) and disables Android backup.
+- The endpoint and API key are entered in the app's Settings. The key is encrypted with
+  AES-256-GCM using a key held in the Android Keystore, and stored in DataStore.
+- Release builds contain no endpoint or key. Debug builds may preload one from
+  `local.properties` (gitignored) for development; don't share debug APKs built that way.
+- The app only allows HTTPS, except plain HTTP to `localhost`, `127.0.0.1` and `10.0.2.2` for
+  local model servers. Android backup is disabled.
 - CI runs [gitleaks](https://github.com/gitleaks/gitleaks) over the full git history on every push.
 
 If a key is ever committed, rotate it immediately. Deleting it in a later commit is not enough,

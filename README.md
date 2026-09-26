@@ -1,6 +1,7 @@
-# BifrostChat
+# TokenFlow
 
-[![CI](https://img.shields.io/github/actions/workflow/status/maturapoj/BifrostChat/ci.yml?branch=main&label=CI&logo=github)](https://github.com/maturapoj/BifrostChat/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/maturapoj/TokenFlow/ci.yml?branch=main&label=CI&logo=github)](https://github.com/maturapoj/TokenFlow/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/maturapoj/TokenFlow?label=APK&logo=android&logoColor=white)](https://github.com/maturapoj/TokenFlow/releases/latest)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![UI](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/compose)
 [![Material 3](https://img.shields.io/badge/Design-Material%203-757575?logo=materialdesign&logoColor=white)](https://m3.material.io)
@@ -15,13 +16,30 @@
 [![API](https://img.shields.io/badge/API-OpenAI%20compatible-412991)](https://platform.openai.com/docs/api-reference/chat/streaming)
 [![License](https://img.shields.io/badge/License-MIT-C9A227)](LICENSE)
 
-A Jetpack Compose chat client for experimenting with **LLM token streaming** on Android.
-It talks to any OpenAI-compatible gateway (`/v1/chat/completions` with `stream: true`)
-and renders the reply as it arrives: reasoning tokens and answer tokens appear separately.
+An Android chat client and reference project for **LLM token streaming** with Jetpack Compose.
+It works with any OpenAI-compatible API (OpenAI, OpenRouter, an AI gateway, or a local
+Ollama / LM Studio server) and renders the reply as it arrives, with reasoning and answer
+tokens shown separately.
 
-| Streaming | Chat history | Dark theme |
-| :---: | :---: | :---: |
-| <img src="docs/demo.gif" width="240" alt="Recording of a reply streaming in: a Thinking block, then a bold intro, bullet points and a Kotlin code block with a Copy button"> | <img src="docs/sessions.gif" width="240" alt="Recording of the chat drawer: switching to a saved chat, starting a new chat, and the new chat appearing at the top of the list"> | <img src="docs/screenshot.png" width="240" alt="Chat screen in the navy dark theme showing a reasoning block, a streamed answer, and a stats line"> |
+| Streaming | Chat history | Settings | Dark theme |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/demo.gif" width="200" alt="Recording of a reply streaming in: a Thinking block, then a bold intro, bullet points and a Kotlin code block with a Copy button"> | <img src="docs/sessions.gif" width="200" alt="Recording of the chat drawer: switching to a saved chat, starting a new chat, and the new chat appearing at the top of the list"> | <img src="docs/settings.png" width="200" alt="Settings screen with endpoint presets, a base URL field, a hidden API key field and a Save and test connection button"> | <img src="docs/screenshot.png" width="200" alt="Chat screen in the navy dark theme showing a reasoning block, a streamed answer, and a stats line"> |
+
+## Try it
+
+1. Download the APK from [Releases](https://github.com/maturapoj/TokenFlow/releases/latest) (or build it, see [Development](#development)).
+2. Open **Settings** and pick a preset or enter a base URL, add your API key, and tap **Save and test connection**.
+3. Pick a model from the top bar and start chatting.
+
+| Endpoint | Base URL | Key |
+| --- | --- | --- |
+| OpenAI | `https://api.openai.com` | required |
+| OpenRouter | `https://openrouter.ai/api` | required |
+| Ollama on your computer (emulator) | `http://10.0.2.2:11434` | leave empty |
+| LM Studio on your computer (emulator) | `http://10.0.2.2:1234` | leave empty |
+| Any other OpenAI-compatible server | its URL, without `/v1` | as needed |
+
+The key is stored on the device, encrypted with a key from the Android Keystore.
 
 ## Features
 
@@ -40,7 +58,9 @@ and renders the reply as it arrives: reasoning tokens and answer tokens appear s
 - Explains failures by kind (no connection, rejected key, rate limited, server or model error)
   in English or Thai, instead of raw HTTP text.
 - Sends at most the 40 most recent messages as context.
-- Loads the model picker from `/v1/models`, grouped by provider (the `provider/` prefix of the id). Embedding models are hidden.
+- Loads the model picker from `/v1/models`, grouped by provider when ids look like `provider/model`.
+  Embedding, speech, image and moderation models are hidden. The last picked model is remembered.
+- Endpoint and API key are set in the app (Settings), not at build time; changing them reloads models without a restart.
 
 ## How the stream flows
 
@@ -48,7 +68,7 @@ and renders the reply as it arrives: reasoning tokens and answer tokens appear s
 OkHttp response body
   └─ readUtf8Line()              one SSE line at a time, as soon as it arrives
       └─ SseChunkParser          "data: {...}" → Reasoning / Content / Usage / Finished
-          └─ Flow<StreamEvent>   BifrostApi → ChatRepository (maps failures to ChatError), on an injected IO dispatcher
+          └─ Flow<StreamEvent>   GatewayApi → ChatRepository (maps failures to ChatError), on an injected IO dispatcher
               └─ ChatUseCase.send()  folds events into the reply (Reply.kt), times it, saves it ≤1×/s and at the end
                   └─ ChatViewModel    mirrors each reply snapshot as ChatResult.ReplyUpdated
                       └─ reduce()      pure (ChatState, ChatResult) → ChatState
@@ -96,28 +116,30 @@ the UI maps each kind to a translated message.
 
 | Layer | File | Role |
 | --- | --- | --- |
-| domain | [`model/`](app/src/main/java/com/example/bifrostchat/domain/model) | `ChatMessage`, `Role`, `StreamEvent`, `LlmModel`, `ModelGroup`, `ChatError`; `Reply.kt` folds events into a reply |
-| domain | [`repository/ChatRepository.kt`](app/src/main/java/com/example/bifrostchat/domain/repository/ChatRepository.kt) | Interface the data layer implements |
-| domain | [`usecase/ChatUseCase.kt`](app/src/main/java/com/example/bifrostchat/domain/usecase/ChatUseCase.kt) | `modelGroups()` (hides non-chat models, groups by provider) and `send()` (the whole send-and-save flow) |
-| domain | [`usecase/SessionUseCase.kt`](app/src/main/java/com/example/bifrostchat/domain/usecase/SessionUseCase.kt) | `load()` (session + messages) and `saveMessage()` (titles a chat from its first message) |
-| data | [`remote/BifrostApi.kt`](app/src/main/java/com/example/bifrostchat/data/remote/BifrostApi.kt) | OkHttp calls; turns the SSE body into a cancellable `Flow` |
-| data | [`remote/SseChunkParser.kt`](app/src/main/java/com/example/bifrostchat/data/remote/SseChunkParser.kt) | Parses one SSE line into `SseLine` (`Ignored`, `Done`, `Chunk`); `error` payloads throw |
-| data | [`remote/ErrorMapping.kt`](app/src/main/java/com/example/bifrostchat/data/remote/ErrorMapping.kt) | HTTP status, stream errors, I/O and parse failures → `ChatError` |
-| data | [`local/ChatDatabase.kt`](app/src/main/java/com/example/bifrostchat/data/local/ChatDatabase.kt) | Room entities (`sessions`, `messages`) and DAO; schema v2 (auto-migrated from v1) exported to `app/schemas/` |
-| data | [`repository/SessionRepositoryImpl.kt`](app/src/main/java/com/example/bifrostchat/data/repository/SessionRepositoryImpl.kt) | Maps Room entities to domain sessions and messages |
-| data | [`repository/ChatRepositoryImpl.kt`](app/src/main/java/com/example/bifrostchat/data/repository/ChatRepositoryImpl.kt) | Maps DTOs and gateway ids (`provider/name`) to domain models |
-| presentation | [`chat/ChatScreen.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatScreen.kt) | `ChatScreen` (collects state and effects), stateless `ChatContent` with the drawer and top bar |
-| presentation | [`chat/ChatViewModel.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatViewModel.kt) | Handles intents, calls use cases, dispatches results |
-| presentation | [`chat/state/`](app/src/main/java/com/example/bifrostchat/presentation/chat/state) | MVI contract (`ChatState`, `ChatIntent`, `ChatEffect`, `ChatResult`) and the pure reducer |
-| presentation | [`chat/components/`](app/src/main/java/com/example/bifrostchat/presentation/chat/components) | `SessionDrawer`, `ModelPicker`, `MessageBubble` (reasoning, stats), `InputBar`, `ErrorText` |
-| presentation | [`chat/streaming/`](app/src/main/java/com/example/bifrostchat/presentation/chat/streaming) | `rememberSmoothReveal()` pacing |
-| presentation | [`chat/markdown/`](app/src/main/java/com/example/bifrostchat/presentation/chat/markdown) | Streaming-tolerant Markdown parser (blocks and inline) and `MarkdownText` renderer |
-| presentation | [`theme/Theme.kt`](app/src/main/java/com/example/bifrostchat/presentation/theme/Theme.kt) | Navy light and dark color schemes |
-| di | [`di/Modules.kt`](app/src/main/java/com/example/bifrostchat/di/Modules.kt) | Koin `dataModule` (OkHttp, API, Room), `domainModule`, `presentationModule` |
+| domain | [`model/`](app/src/main/java/io/github/maturapoj/tokenflow/domain/model) | `ChatMessage`, `Role`, `StreamEvent`, `LlmModel`, `ModelGroup`, `ChatError`, `GatewaySettings`; `Reply.kt` folds events into a reply |
+| domain | [`repository/ChatRepository.kt`](app/src/main/java/io/github/maturapoj/tokenflow/domain/repository/ChatRepository.kt) | Interface the data layer implements |
+| domain | [`usecase/ChatUseCase.kt`](app/src/main/java/io/github/maturapoj/tokenflow/domain/usecase/ChatUseCase.kt) | `modelGroups()` (hides non-chat models, groups by provider) and `send()` (the whole send-and-save flow) |
+| domain | [`usecase/SessionUseCase.kt`](app/src/main/java/io/github/maturapoj/tokenflow/domain/usecase/SessionUseCase.kt) | `load()` (session + messages) and `saveMessage()` (titles a chat from its first message) |
+| data | [`remote/GatewayApi.kt`](app/src/main/java/io/github/maturapoj/tokenflow/data/remote/GatewayApi.kt) | OkHttp calls to the configured endpoint; turns the SSE body into a cancellable `Flow` |
+| data | [`settings/`](app/src/main/java/io/github/maturapoj/tokenflow/data/settings) | Settings in DataStore; the API key encrypted with AES-GCM via the Android Keystore |
+| data | [`remote/SseChunkParser.kt`](app/src/main/java/io/github/maturapoj/tokenflow/data/remote/SseChunkParser.kt) | Parses one SSE line into `SseLine` (`Ignored`, `Done`, `Chunk`); `error` payloads throw |
+| data | [`remote/ErrorMapping.kt`](app/src/main/java/io/github/maturapoj/tokenflow/data/remote/ErrorMapping.kt) | HTTP status, stream errors, I/O and parse failures → `ChatError` |
+| data | [`local/ChatDatabase.kt`](app/src/main/java/io/github/maturapoj/tokenflow/data/local/ChatDatabase.kt) | Room entities (`sessions`, `messages`) and DAO; schema v2 (auto-migrated from v1) exported to `app/schemas/` |
+| data | [`repository/SessionRepositoryImpl.kt`](app/src/main/java/io/github/maturapoj/tokenflow/data/repository/SessionRepositoryImpl.kt) | Maps Room entities to domain sessions and messages |
+| data | [`repository/ChatRepositoryImpl.kt`](app/src/main/java/io/github/maturapoj/tokenflow/data/repository/ChatRepositoryImpl.kt) | Maps DTOs and gateway ids (`provider/name`) to domain models |
+| presentation | [`chat/ChatScreen.kt`](app/src/main/java/io/github/maturapoj/tokenflow/presentation/chat/ChatScreen.kt) | `ChatScreen` (collects state and effects), stateless `ChatContent` with the drawer and top bar |
+| presentation | [`chat/ChatViewModel.kt`](app/src/main/java/io/github/maturapoj/tokenflow/presentation/chat/ChatViewModel.kt) | Handles intents, calls use cases, dispatches results |
+| presentation | [`chat/state/`](app/src/main/java/io/github/maturapoj/tokenflow/presentation/chat/state) | MVI contract (`ChatState`, `ChatIntent`, `ChatEffect`, `ChatResult`) and the pure reducer |
+| presentation | [`chat/components/`](app/src/main/java/io/github/maturapoj/tokenflow/presentation/chat/components) | `SessionDrawer`, `ModelPicker`, `MessageBubble` (reasoning, stats), `InputBar`, `ErrorText` |
+| presentation | [`chat/streaming/`](app/src/main/java/io/github/maturapoj/tokenflow/presentation/chat/streaming) | `rememberSmoothReveal()` pacing |
+| presentation | [`chat/markdown/`](app/src/main/java/io/github/maturapoj/tokenflow/presentation/chat/markdown) | Streaming-tolerant Markdown parser (blocks and inline) and `MarkdownText` renderer |
+| presentation | [`settings/`](app/src/main/java/io/github/maturapoj/tokenflow/presentation/settings) | Settings screen: presets, endpoint and key, save-and-test |
+| presentation | [`theme/Theme.kt`](app/src/main/java/io/github/maturapoj/tokenflow/presentation/theme/Theme.kt) | Navy light and dark color schemes |
+| di | [`di/Modules.kt`](app/src/main/java/io/github/maturapoj/tokenflow/di/Modules.kt) | Koin `dataModule` (OkHttp, API, Room), `domainModule`, `presentationModule` |
 
 ## Notes from testing
 
-**The gateway delivers chunks in bursts.** Chunk arrival times measured with curl looked like this:
+**Some gateways deliver chunks in bursts.** Against a Bifrost gateway in front of DashScope, chunk arrival times measured with curl looked like this:
 the first ~20 chunks arrived together at 2.5 s, then more came in groups about a second apart.
 This affected two design choices:
 
@@ -152,39 +174,26 @@ A new chat isn't stored until its first message, so empty chats don't pile up.
 the bottom when the message grew or the keyboard opened. A reversed list keeps index 0
 (the newest message) anchored to the bottom.
 
-## Setup
+## Development
 
 Requirements: Android SDK (compileSdk 36), JDK 17+.
 
 ```sh
-cp local.properties.example local.properties
+cp local.properties.example local.properties   # set sdk.dir
+./gradlew installDebug                          # build and install on a device or emulator
+./gradlew testDebugUnitTest                     # unit tests: parsers, use cases, reducer, ViewModels, Koin graph
+./gradlew connectedDebugAndroidTest             # device tests: Room + migration, Keystore encryption, Compose UI
 ```
 
-Fill in `local.properties`:
+To skip typing an endpoint while developing, debug builds can preload one from `local.properties`
+(`tokenflow.baseUrl`, `tokenflow.apiKey`). Release builds never embed an endpoint or key.
 
-```properties
-sdk.dir=/path/to/Android/sdk
-bifrost.baseUrl=https://your-gateway.example.com   # without /v1
-bifrost.apiKey=sk-...
-bifrost.defaultModel=provider/model   # optional; otherwise the first listed model
-```
-
-Then:
-
-```sh
-./gradlew installDebug        # build and install on a device or emulator
-./gradlew testDebugUnitTest          # SSE and Markdown parsers, reveal pacing, use cases, reducer, ViewModel, Koin graph (no network)
-./gradlew connectedDebugAndroidTest  # Room repository and the v1→v2 migration (needs a device or emulator)
-```
-
-> [!WARNING]
-> The API key is compiled into `BuildConfig`, so anyone who has the APK can extract it.
-> This is fine for local experiments. Do not distribute builds made with a real key;
-> a production app should call its own backend instead. See [SECURITY.md](SECURITY.md).
+CI runs unit tests, device tests on an emulator and a gitleaks scan on every push. Pushing a
+`v*` tag builds a signed APK and attaches it to a GitHub Release. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Stack
 
-Kotlin 2.2 · Jetpack Compose (BOM 2026.02) · Material 3 · MVI · Clean Architecture · Koin 4.1 · Room 2.8 · Coroutines/Flow · OkHttp 4.12 · `org.json`
+Kotlin 2.2 · Jetpack Compose (BOM 2026.02) · Material 3 · MVI · Clean Architecture · Koin 4.1 · Room 2.8 · DataStore · Coroutines/Flow · OkHttp 4.12 · kotlinx.serialization
 
 ## License
 

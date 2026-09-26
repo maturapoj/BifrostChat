@@ -1,6 +1,7 @@
-# Copy to local.properties (gitignored) and fill in.
+# Copy to local.properties (gitignored).
 sdk.dir=/path/to/Android/sdk
-bifrost.baseUrl=https://your-gateway.example.com
-bifrost.apiKey=sk-bf-YOUR_KEY
-# Optional: model selected on first launch (otherwise the first one listed)
-# bifrost.defaultModel=provider/model-name
+
+# Optional, debug builds only: preload an OpenAI-compatible endpoint so you don't
+# have to type it into Settings. Release builds ignore these.
+# tokenflow.baseUrl=https://api.openai.com
+# tokenflow.apiKey=sk-...

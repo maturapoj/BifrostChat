@@ -24,9 +24,27 @@
     <string name="copied">คัดลอกแล้ว</string>
 
     <string name="error_network">เชื่อมต่อไม่ได้ ตรวจสอบเครือข่ายแล้วลองใหม่</string>
-    <string name="error_unauthorized">API key ถูกปฏิเสธ ตรวจสอบ bifrost.apiKey</string>
+    <string name="error_unauthorized">API key ถูกปฏิเสธ ตรวจสอบในหน้าตั้งค่า</string>
     <string name="error_rate_limited">ส่งคำขอถี่เกินไป รอสักครู่แล้วลองใหม่</string>
     <string name="error_server">gateway ตอบกลับด้วยข้อผิดพลาด (HTTP %1$d)</string>
     <string name="error_gateway">โมเดลแจ้งข้อผิดพลาด: %1$s</string>
     <string name="error_unknown">เกิดข้อผิดพลาด: %1$s</string>
+
+    <string name="settings">ตั้งค่า</string>
+    <string name="back">กลับ</string>
+    <string name="settings_intro">เชื่อมต่อกับ endpoint ที่ compatible กับ OpenAI ได้ทุกตัว เช่น OpenAI, OpenRouter, gateway ของคุณ หรือเซิร์ฟเวอร์ในเครื่องอย่าง Ollama และ LM Studio</string>
+    <string name="base_url">Base URL</string>
+    <string name="base_url_help">ไม่ต้องใส่ /v1 ใช้ http:// ธรรมดาได้เฉพาะ localhost และ 10.0.2.2 (เครื่อง host ของ emulator)</string>
+    <string name="base_url_invalid">ใส่ URL ที่ขึ้นต้นด้วย http:// หรือ https://</string>
+    <string name="api_key">API key</string>
+    <string name="api_key_help">เก็บแบบเข้ารหัสไว้ในเครื่องนี้ เว้นว่างได้สำหรับเซิร์ฟเวอร์ในเครื่อง</string>
+    <string name="show">แสดง</string>
+    <string name="hide">ซ่อน</string>
+    <string name="save_and_test">บันทึกและทดสอบการเชื่อมต่อ</string>
+    <string name="testing_connection">กำลังทดสอบการเชื่อมต่อ…</string>
+    <string name="connected_models">เชื่อมต่อแล้ว · %1$d models</string>
+    <string name="setup_title">เชื่อมต่อ endpoint ของโมเดล</string>
+    <string name="setup_body">TokenFlow ใช้ได้กับ API ที่ compatible กับ OpenAI ทุกตัว ใส่ base URL และ key เพื่อเริ่มแชท</string>
+    <string name="open_settings">เปิดการตั้งค่า</string>
+    <string name="error_not_configured">ยังไม่ได้ตั้งค่า endpoint เปิดการตั้งค่าเพื่อเพิ่ม</string>
 </resources>

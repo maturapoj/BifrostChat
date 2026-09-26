@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "BifrostChat"
+rootProject.name = "TokenFlow"
 include(":app")
