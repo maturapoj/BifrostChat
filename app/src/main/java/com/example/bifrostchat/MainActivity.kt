@@ -8,6 +8,7 @@ import com.example.bifrostchat.presentation.chat.ChatScreen
 import com.example.bifrostchat.presentation.theme.BifrostChatTheme
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

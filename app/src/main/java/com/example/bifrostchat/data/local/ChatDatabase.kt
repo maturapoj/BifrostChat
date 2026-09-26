@@ -1,5 +1,7 @@
 package com.example.bifrostchat.data.local
 
+import androidx.room.AutoMigration
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Embedded
@@ -34,7 +36,12 @@ data class MessageEntity(
     val role: String,
     val content: String,
     val reasoning: String,
+    /** Error detail text (v1 stored only this). */
     val error: String?,
+    /** ChatError kind, e.g. "network", "rate_limited"; null for no error or rows from v1. Added in v2. */
+    @ColumnInfo(defaultValue = "NULL") val errorKind: String? = null,
+    /** HTTP status for server errors. Added in v2. */
+    @ColumnInfo(defaultValue = "NULL") val errorCode: Int? = null,
     @Embedded(prefix = "stats_") val stats: StatsEntity?,
     val createdAt: Long,
 )
@@ -78,6 +85,22 @@ interface ChatDao {
     @Insert
     suspend fun insertMessage(message: MessageEntity): Long
 
+    /** Rewrites the streamed parts of a message; keeps its session and position. */
+    @Query(
+        """UPDATE messages SET content = :content, reasoning = :reasoning, error = :error,
+           errorKind = :errorKind, errorCode = :errorCode,
+           stats_timeToFirstTokenMs = :ttftMs, stats_chunks = :chunks, stats_completionTokens = :completionTokens,
+           stats_reasoningTokens = :reasoningTokens, stats_totalMs = :totalMs, stats_tokensPerSecond = :tokensPerSecond
+           WHERE id = :id""",
+    )
+    suspend fun updateMessage(
+        id: Long, content: String, reasoning: String, error: String?, errorKind: String?, errorCode: Int?,
+        ttftMs: Long?, chunks: Int?, completionTokens: Int?, reasoningTokens: Int?, totalMs: Long?, tokensPerSecond: Double?,
+    )
+
+    @Query("DELETE FROM messages WHERE id = :id")
+    suspend fun deleteMessage(id: Long)
+
     @Transaction
     suspend fun addMessage(message: MessageEntity): Long {
         val id = insertMessage(message)
@@ -86,7 +109,11 @@ interface ChatDao {
     }
 }
 
-@Database(entities = [SessionEntity::class, MessageEntity::class], version = 1)
+@Database(
+    entities = [SessionEntity::class, MessageEntity::class],
+    version = 2,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
+)
 abstract class ChatDatabase : RoomDatabase() {
     abstract fun chatDao(): ChatDao
 }

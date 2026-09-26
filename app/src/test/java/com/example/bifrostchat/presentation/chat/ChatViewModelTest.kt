@@ -1,5 +1,7 @@
 package com.example.bifrostchat.presentation.chat
 
+import com.example.bifrostchat.domain.model.ChatError
+import com.example.bifrostchat.domain.model.ChatException
 import com.example.bifrostchat.domain.model.ChatMessage
 import com.example.bifrostchat.domain.model.LlmModel
 import com.example.bifrostchat.domain.model.Role
@@ -62,11 +64,10 @@ class ChatViewModelTest {
         initialModelId: String = "",
     ) =
         ChatViewModel(
-            ChatUseCase(chat),
+            ChatUseCase(chat, sessions, SessionUseCase(sessions), testScheduler.timeSource),
             SessionUseCase(sessions),
             sessions,
             initialModelId = initialModelId,
-            timeSource = testScheduler.timeSource,
         ).also { advanceUntilIdle() }
 
     private fun replying(vararg parts: String) = FakeChatRepository(stream = {
@@ -120,8 +121,7 @@ class ChatViewModelTest {
         advanceUntilIdle()
 
         val stats = vm.state.value.messages.last().stats!!
-        // 800 ms to the first token plus the 50 ms coalescing window before it reaches state.
-        assertEquals(850.milliseconds, stats.timeToFirstToken)
+        assertEquals(800.milliseconds, stats.timeToFirstToken)
         assertEquals(2.seconds, stats.total)
         assertEquals(20.0, stats.tokensPerSecond!!, 0.001)
     }
@@ -148,12 +148,12 @@ class ChatViewModelTest {
     }
 
     @Test fun `stream error is shown on the message and excluded from next history`() = runTest(dispatcher) {
-        val chat = FakeChatRepository(stream = { flow { throw IllegalStateException("boom") } })
+        val chat = FakeChatRepository(stream = { flow { throw ChatException(ChatError.Gateway("boom")) } })
         val vm = viewModel(chat)
 
         vm.onIntent(ChatIntent.Send("first"))
         advanceUntilIdle()
-        assertEquals("boom", vm.state.value.messages.last().error)
+        assertEquals(ChatError.Gateway("boom"), vm.state.value.messages.last().error)
 
         chat.stream = { flow {} }
         vm.onIntent(ChatIntent.Send("second"))
@@ -163,7 +163,7 @@ class ChatViewModelTest {
 
     @Test fun `model load failure emits effect`() = runTest(dispatcher) {
         val vm = viewModel(FakeChatRepository(models = { error("offline") }))
-        assertEquals(ChatEffect.ModelsFailed("offline"), vm.effects.first())
+        assertEquals(ChatEffect.ModelsFailed(ChatError.Unknown("offline")), vm.effects.first())
     }
 
     @Test fun `send is ignored while streaming`() = runTest(dispatcher) {

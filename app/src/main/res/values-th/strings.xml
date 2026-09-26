@@ -22,4 +22,11 @@
 
     <string name="copy">คัดลอก</string>
     <string name="copied">คัดลอกแล้ว</string>
+
+    <string name="error_network">เชื่อมต่อไม่ได้ ตรวจสอบเครือข่ายแล้วลองใหม่</string>
+    <string name="error_unauthorized">API key ถูกปฏิเสธ ตรวจสอบ bifrost.apiKey</string>
+    <string name="error_rate_limited">ส่งคำขอถี่เกินไป รอสักครู่แล้วลองใหม่</string>
+    <string name="error_server">gateway ตอบกลับด้วยข้อผิดพลาด (HTTP %1$d)</string>
+    <string name="error_gateway">โมเดลแจ้งข้อผิดพลาด: %1$s</string>
+    <string name="error_unknown">เกิดข้อผิดพลาด: %1$s</string>
 </resources>

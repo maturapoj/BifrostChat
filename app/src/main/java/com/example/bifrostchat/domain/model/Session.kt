@@ -15,13 +15,13 @@ data class SessionMessage(
     val role: Role,
     val content: String,
     val reasoning: String = "",
-    val error: String? = null,
+    val error: ChatError? = null,
     val stats: StreamStats? = null,
 )
 
 data class StreamStats(
     val timeToFirstToken: Duration? = null,
-    /** UI updates after coalescing, not raw SSE chunks. */
+    /** Content and reasoning chunks received. */
     val chunks: Int = 0,
     val completionTokens: Int? = null,
     val reasoningTokens: Int? = null,

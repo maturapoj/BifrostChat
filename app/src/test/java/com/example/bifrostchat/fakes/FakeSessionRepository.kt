@@ -59,6 +59,22 @@ class FakeSessionRepository : SessionRepository {
         return id
     }
 
+    override suspend fun updateMessage(message: SessionMessage) {
+        messages.values.forEach { list ->
+            val i = list.indexOfFirst { it.id == message.id }
+            if (i >= 0) list[i] = message
+        }
+        updates++
+    }
+
+    override suspend fun deleteMessage(id: Long) {
+        messages.values.forEach { list -> list.removeAll { it.id == id } }
+    }
+
+    /** How many times updateMessage ran, to check save throttling. */
+    var updates = 0
+        private set
+
     private fun tick() = Instant.fromEpochMilliseconds(++time)
 
     private fun update(id: Long, transform: (ChatSession) -> ChatSession) {

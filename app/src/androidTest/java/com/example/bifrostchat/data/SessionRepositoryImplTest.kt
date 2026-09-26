@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.bifrostchat.data.local.ChatDatabase
 import com.example.bifrostchat.data.repository.SessionRepositoryImpl
+import com.example.bifrostchat.domain.model.ChatError
 import com.example.bifrostchat.domain.model.Role
 import com.example.bifrostchat.domain.model.SessionMessage
 import com.example.bifrostchat.domain.model.StreamStats
@@ -46,14 +47,14 @@ class SessionRepositoryImplTest {
         val stats = StreamStats(timeToFirstToken = 900.milliseconds, chunks = 4, completionTokens = 50, reasoningTokens = 10, total = 2.seconds, tokensPerSecond = 25.0)
         repo.addMessage(id, SessionMessage(0, Role.User, "q"))
         repo.addMessage(id, SessionMessage(0, Role.Assistant, "a", reasoning = "think", stats = stats))
-        repo.addMessage(id, SessionMessage(0, Role.Assistant, "", error = "HTTP 500"))
+        repo.addMessage(id, SessionMessage(0, Role.Assistant, "", error = ChatError.Server(500, "boom")))
 
         val messages = repo.getMessages(id)
         assertEquals(listOf(Role.User, Role.Assistant, Role.Assistant), messages.map { it.role })
         assertNull(messages[0].stats)
         assertEquals(stats, messages[1].stats)
         assertEquals("think", messages[1].reasoning)
-        assertEquals("HTTP 500", messages[2].error)
+        assertEquals(ChatError.Server(500, "boom"), messages[2].error)
     }
 
     @Test fun newestActivityListsFirst() = runTest {
@@ -73,6 +74,22 @@ class SessionRepositoryImplTest {
 
         assertNull(repo.getSession(id))
         assertTrue(repo.getMessages(id).isEmpty())
+    }
+
+    @Test fun streamedReplyIsUpdatedInPlaceOrDeleted() = runTest {
+        val id = repo.createSession("", "p/m")
+        repo.addMessage(id, SessionMessage(0, Role.User, "q"))
+        val replyId = repo.addMessage(id, SessionMessage(0, Role.Assistant, ""))
+        val emptyId = repo.addMessage(id, SessionMessage(0, Role.Assistant, ""))
+
+        val stats = StreamStats(timeToFirstToken = 300.milliseconds, chunks = 2)
+        repo.updateMessage(SessionMessage(replyId, Role.Assistant, "partial", reasoning = "r", error = ChatError.RateLimited, stats = stats))
+        repo.deleteMessage(emptyId)
+
+        val messages = repo.getMessages(id)
+        assertEquals(listOf("q", "partial"), messages.map { it.content })
+        assertEquals(ChatError.RateLimited, messages[1].error)
+        assertEquals(stats, messages[1].stats)
     }
 
     @Test fun titleAndModelUpdates() = runTest {

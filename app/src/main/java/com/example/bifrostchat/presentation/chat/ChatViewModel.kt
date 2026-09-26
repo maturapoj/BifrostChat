@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bifrostchat.domain.model.ChatMessage
 import com.example.bifrostchat.domain.model.Role
+import com.example.bifrostchat.domain.model.asChatError
 import com.example.bifrostchat.domain.repository.SessionRepository
 import com.example.bifrostchat.domain.usecase.ChatUseCase
+import com.example.bifrostchat.domain.usecase.SendRequest
 import com.example.bifrostchat.domain.usecase.SessionUseCase
 import com.example.bifrostchat.presentation.chat.state.ChatEffect
 import com.example.bifrostchat.presentation.chat.state.ChatIntent
@@ -13,13 +15,9 @@ import com.example.bifrostchat.presentation.chat.state.ChatResult
 import com.example.bifrostchat.presentation.chat.state.ChatState
 import com.example.bifrostchat.presentation.chat.state.UiMessage
 import com.example.bifrostchat.presentation.chat.state.reduce
-import com.example.bifrostchat.presentation.chat.state.toSessionMessage
 import com.example.bifrostchat.presentation.chat.state.toUi
-import com.example.bifrostchat.presentation.chat.streaming.coalesceTokens
-import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -31,14 +29,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class ChatViewModel(
     private val chat: ChatUseCase,
     private val sessionUseCase: SessionUseCase,
+    /** Plain session reads and writes; anything with rules goes through the use cases. */
     private val sessions: SessionRepository,
+    /** Preferred model id from config; ignored if the gateway doesn't list it. */
     initialModelId: String = "",
-    private val timeSource: TimeSource = TimeSource.Monotonic,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatState(selectedModelId = initialModelId))
@@ -79,7 +77,7 @@ class ChatViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _effects.send(ChatEffect.ModelsFailed(e.message ?: e.toString()))
+                _effects.send(ChatEffect.ModelsFailed(e.asChatError()))
             }
         }
     }
@@ -141,36 +139,27 @@ class ChatViewModel(
 
         val user = UiMessage(id = nextId++, role = Role.User, content = text.trim())
         val assistantId = nextId++
-        val history = (current.messages + user)
-            .filter { it.error == null }
-            .map { ChatMessage(it.role, it.content) }
-
+        val request = SendRequest(
+            sessionId = current.currentSessionId,
+            modelId = current.selectedModelId,
+            history = current.messages.filter { it.error == null }.map { ChatMessage(it.role, it.content) },
+            text = user.content,
+        )
         dispatch(ChatResult.StreamStarted(user, assistantId))
 
+        // Saving, timing and error handling live in ChatUseCase.send; this only mirrors its snapshots.
         streamJob = viewModelScope.launch {
-            val start = timeSource.markNow()
-            var error: String? = null
-            var sessionId: Long? = null
             try {
-                sessionId = current.currentSessionId
-                    ?: sessions.createSession(title = "", modelId = current.selectedModelId).also { dispatch(ChatResult.SessionCreated(it)) }
-                sessionUseCase.saveMessage(sessionId, user.toSessionMessage())
-
-                chat.stream(current.selectedModelId, history).coalesceTokens().collect { event ->
-                    dispatch(ChatResult.StreamEventReceived(assistantId, event, start.elapsedNow()))
+                chat.send(request).collect { update ->
+                    if (_state.value.currentSessionId != update.sessionId) dispatch(ChatResult.SessionCreated(update.sessionId))
+                    dispatch(ChatResult.ReplyUpdated(assistantId, update.reply))
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                error = e.message ?: e.toString()
+                dispatch(ChatResult.ReplyFailed(assistantId, e.asChatError()))
             } finally {
-                dispatch(ChatResult.StreamEnded(assistantId, error))
-                // Save the reply even when cancelled (Stop, or switching sessions), so partial answers persist.
-                val id = sessionId
-                val reply = _state.value.messages.find { it.id == assistantId }
-                if (id != null && reply != null && (reply.content.isNotEmpty() || reply.reasoning.isNotEmpty() || reply.error != null)) {
-                    withContext(NonCancellable) { sessionUseCase.saveMessage(id, reply.toSessionMessage()) }
-                }
+                dispatch(ChatResult.StreamEnded(assistantId))
             }
         }
     }

@@ -53,6 +53,7 @@ import com.example.bifrostchat.presentation.chat.components.InputBar
 import com.example.bifrostchat.presentation.chat.components.MessageBubble
 import com.example.bifrostchat.presentation.chat.components.ModelPicker
 import com.example.bifrostchat.presentation.chat.components.SessionDrawer
+import com.example.bifrostchat.presentation.chat.components.message
 import com.example.bifrostchat.presentation.chat.state.ChatEffect
 import com.example.bifrostchat.presentation.chat.state.ChatIntent
 import com.example.bifrostchat.presentation.chat.state.ChatState
@@ -73,7 +74,7 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
             when (effect) {
                 is ChatEffect.ModelsFailed -> {
                     val result = snackbar.showSnackbar(
-                        message = resources.getString(R.string.models_load_failed, effect.message),
+                        message = resources.getString(R.string.models_load_failed, effect.error.message(resources)),
                         actionLabel = resources.getString(R.string.retry),
                         duration = SnackbarDuration.Indefinite,
                     )

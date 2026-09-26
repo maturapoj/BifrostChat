@@ -1,13 +1,12 @@
 package com.example.bifrostchat.presentation.chat.state
 
+import com.example.bifrostchat.domain.model.ChatError
 import com.example.bifrostchat.domain.model.ChatSession
 import com.example.bifrostchat.domain.model.LlmModel
 import com.example.bifrostchat.domain.model.ModelGroup
 import com.example.bifrostchat.domain.model.Role
 import com.example.bifrostchat.domain.model.SessionMessage
-import com.example.bifrostchat.domain.model.StreamEvent
 import com.example.bifrostchat.domain.model.StreamStats
-import kotlin.time.Duration
 
 data class ChatState(
     val modelGroups: List<ModelGroup> = emptyList(),
@@ -29,7 +28,7 @@ data class UiMessage(
     val content: String = "",
     val reasoning: String = "",
     val isStreaming: Boolean = false,
-    val error: String? = null,
+    val error: ChatError? = null,
     val stats: StreamStats? = null,
 )
 
@@ -46,16 +45,19 @@ sealed interface ChatIntent {
 
 /** One-off events for the UI that should not survive in state. */
 sealed interface ChatEffect {
-    data class ModelsFailed(val message: String) : ChatEffect
+    data class ModelsFailed(val error: ChatError) : ChatEffect
 }
 
-/** What happened, as input to [reduce]. Timing is passed in so the reducer stays pure. */
+/** What happened, as input to [reduce]. */
 sealed interface ChatResult {
     data class ModelsLoaded(val groups: List<ModelGroup>) : ChatResult
     data class ModelSelected(val modelId: String) : ChatResult
     data class StreamStarted(val user: UiMessage, val assistantId: Long) : ChatResult
-    data class StreamEventReceived(val assistantId: Long, val event: StreamEvent, val elapsed: Duration) : ChatResult
-    data class StreamEnded(val assistantId: Long, val error: String?) : ChatResult
+    /** Latest snapshot of the reply; the domain folds stream events into it. */
+    data class ReplyUpdated(val assistantId: Long, val reply: SessionMessage) : ChatResult
+    /** The send failed before the stream could report it on the reply (e.g. saving to the database). */
+    data class ReplyFailed(val assistantId: Long, val error: ChatError) : ChatResult
+    data class StreamEnded(val assistantId: Long) : ChatResult
     data class SessionsUpdated(val sessions: List<ChatSession>) : ChatResult
     data class SessionCreated(val id: Long) : ChatResult
     data class SessionOpened(val id: Long, val modelId: String, val messages: List<UiMessage>) : ChatResult
@@ -63,6 +65,3 @@ sealed interface ChatResult {
 }
 
 fun SessionMessage.toUi() = UiMessage(id = id, role = role, content = content, reasoning = reasoning, error = error, stats = stats)
-
-fun UiMessage.toSessionMessage() =
-    SessionMessage(id = id, role = role, content = content, reasoning = reasoning, error = error, stats = stats)

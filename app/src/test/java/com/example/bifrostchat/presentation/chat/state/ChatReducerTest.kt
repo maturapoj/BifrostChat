@@ -1,16 +1,16 @@
 package com.example.bifrostchat.presentation.chat.state
 
+import com.example.bifrostchat.domain.model.ChatError
 import com.example.bifrostchat.domain.model.LlmModel
 import com.example.bifrostchat.domain.model.ModelGroup
 import com.example.bifrostchat.domain.model.Role
-import com.example.bifrostchat.domain.model.StreamEvent
-import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.flow.first
+import com.example.bifrostchat.domain.model.SessionMessage
+import com.example.bifrostchat.domain.model.StreamStats
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.time.Duration.Companion.milliseconds
 
 class ChatReducerTest {
 
@@ -26,32 +26,24 @@ class ChatReducerTest {
         assertTrue(streaming.assistant().isStreaming)
     }
 
-    @Test fun `tokens append per channel and first token sets TTFT once`() {
-        val s = streaming.after(
-            ChatResult.StreamEventReceived(1, StreamEvent.Reasoning("think"), elapsed = 800.milliseconds),
-            ChatResult.StreamEventReceived(1, StreamEvent.Content("Hel"), elapsed = 900.milliseconds),
-            ChatResult.StreamEventReceived(1, StreamEvent.Content("lo"), elapsed = 950.milliseconds),
-        )
-        val msg = s.assistant()
-        assertEquals("think", msg.reasoning)
+    @Test fun `reply snapshot replaces the assistant's text, stats and error`() {
+        val stats = StreamStats(timeToFirstToken = 700.milliseconds, chunks = 2)
+        val snapshot = SessionMessage(99, Role.Assistant, "Hello", reasoning = "think", stats = stats)
+
+        val msg = streaming.after(ChatResult.ReplyUpdated(1, snapshot)).assistant()
+
         assertEquals("Hello", msg.content)
-        assertEquals(800.milliseconds, msg.stats?.timeToFirstToken)
-        assertEquals(3, msg.stats?.chunks)
+        assertEquals("think", msg.reasoning)
+        assertEquals(stats, msg.stats)
+        assertEquals(1L, msg.id) // the UI id stays; the database id doesn't leak in
+        assertTrue(msg.isStreaming)
     }
 
-    @Test fun `usage sets tokens per second over whole request`() {
-        val s = streaming.after(ChatResult.StreamEventReceived(1, StreamEvent.Usage(10, 100, 20), elapsed = 2.seconds))
-        val stats = s.assistant().stats!!
-        assertEquals(100, stats.completionTokens)
-        assertEquals(20, stats.reasoningTokens)
-        assertEquals(50.0, stats.tokensPerSecond!!, 0.001)
-    }
-
-    @Test fun `stream end clears streaming flags and keeps error`() {
-        val s = streaming.after(ChatResult.StreamEnded(1, error = "HTTP 500"))
+    @Test fun `stream end clears streaming flags and a failure shows on the message`() {
+        val s = streaming.after(ChatResult.ReplyFailed(1, ChatError.Network), ChatResult.StreamEnded(1))
         assertFalse(s.isStreaming)
         assertFalse(s.assistant().isStreaming)
-        assertEquals("HTTP 500", s.assistant().error)
+        assertEquals(ChatError.Network, s.assistant().error)
     }
 
     @Test fun `models loaded keeps selection if available, else picks first of first group`() {

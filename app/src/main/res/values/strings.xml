@@ -29,4 +29,12 @@
     <string name="code_label" translatable="false">code</string>
     <string name="copy">Copy</string>
     <string name="copied">Copied</string>
+
+    <!-- Errors -->
+    <string name="error_network">No connection. Check your network and try again.</string>
+    <string name="error_unauthorized">The API key was rejected. Check bifrost.apiKey.</string>
+    <string name="error_rate_limited">Too many requests. Wait a moment and try again.</string>
+    <string name="error_server">The gateway returned an error (HTTP %1$d).</string>
+    <string name="error_gateway">The model reported an error: %1$s</string>
+    <string name="error_unknown">Something went wrong: %1$s</string>
 </resources>

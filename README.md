@@ -27,16 +27,19 @@ and renders the reply as it arrives: reasoning tokens and answer tokens appear s
 
 - Streams tokens over server-sent events. **Stop** cancels the stream and closes the HTTP connection.
 - Shows reasoning tokens (`delta.reasoning` / `delta.reasoning_content`) in a collapsible "Thinking…" block.
-- Batches UI updates (at most one every 50 ms) instead of recomposing once per chunk.
 - Reveals text at a steady, backlog-adaptive pace, so bursty delivery reads as smooth typing.
 - Renders Markdown in replies: headings, lists, quotes, **bold**, *italic*, `inline code`, links,
   and fenced code blocks with a language label, horizontal scrolling and a Copy button.
   Partial syntax mid-stream is handled: an unclosed fence renders as an open code block.
-- Shows stats under each reply: time to first token, number of UI updates, completion and reasoning tokens, total time, tok/s.
+- Shows stats under each reply: time to first token, chunks received, completion and reasoning tokens, total time, tok/s.
 - Saves chats on the device (Room). The ☰ drawer lists them newest first, titled after the first
   message; tap to reopen, ✕ to delete (with confirmation), **New** to start another. Each chat
   remembers its model, and the latest one reopens on launch.
-  Stopped or interrupted replies are saved with the text received so far.
+- Saves replies **while they stream** (at most once a second), so Stop, switching chats, or the
+  process being killed keeps the text received so far.
+- Explains failures by kind (no connection, rejected key, rate limited, server or model error)
+  in English or Thai, instead of raw HTTP text.
+- Sends at most the 40 most recent messages as context.
 - Loads the model picker from `/v1/models`, grouped by provider (the `provider/` prefix of the id). Embedding models are hidden.
 
 ## How the stream flows
@@ -45,10 +48,10 @@ and renders the reply as it arrives: reasoning tokens and answer tokens appear s
 OkHttp response body
   └─ readUtf8Line()              one SSE line at a time, as soon as it arrives
       └─ SseChunkParser          "data: {...}" → Reasoning / Content / Usage / Finished
-          └─ Flow<StreamEvent>   BifrostApi → ChatRepository → ChatUseCase.stream(), runs on Dispatchers.IO
-              └─ coalesceTokens()  batches deltas on a 50 ms timer
-                  └─ ChatViewModel  wraps each event as ChatResult.StreamEventReceived
-                      └─ reduce()    pure (ChatState, ChatResult) → ChatState
+          └─ Flow<StreamEvent>   BifrostApi → ChatRepository (maps failures to ChatError), on an injected IO dispatcher
+              └─ ChatUseCase.send()  folds events into the reply (Reply.kt), times it, saves it ≤1×/s and at the end
+                  └─ ChatViewModel    mirrors each reply snapshot as ChatResult.ReplyUpdated
+                      └─ reduce()      pure (ChatState, ChatResult) → ChatState
                           └─ ChatContent  LazyColumn(reverseLayout = true) keeps the newest text in view
                               └─ rememberSmoothReveal()  reveals the text at a steady pace
                                   └─ MarkdownText        one Text per block; finished blocks skip recomposition
@@ -58,16 +61,16 @@ OkHttp response body
 
 ```text
  ChatContent ──ChatIntent──▶ ChatViewModel.onIntent()
-      ▲                           │  side effects: network, stream job, TimeSource
+      ▲                           │  side effects: use cases, stream job, chat switching
       │                           ▼
   ChatState ◀──reduce()──── ChatResult
       ChatEffect (one-off, e.g. "models failed" → Snackbar with Retry)
 ```
 
 - **Intent:** `LoadModels`, `SelectModel`, `Send`, `Stop`, `NewChat`, `OpenSession`, `DeleteSession`. `onIntent()` is the only public entry point.
-- **Result → reducer:** the ViewModel turns each event into a `ChatResult` and calls `reduce()`.
-  Timing is passed in as an `elapsed: Duration` (measured with an injected `TimeSource`), so the reducer
-  stays pure and can be unit tested without coroutines; ViewModel tests use the test scheduler's virtual time.
+- **Result → reducer:** the ViewModel turns what the use cases report into a `ChatResult` and calls
+  `reduce()`, a pure function tested without coroutines. The reply itself is built in the domain
+  (`SessionMessage.apply(event, elapsed)`), so the reducer only swaps in the latest snapshot.
 - **State:** a single immutable `ChatState` exposed as a `StateFlow`.
 - **Effect:** one-off events go through a `Channel`, so they are not replayed on recomposition or rotation.
 - `ChatContent(state, onIntent)` is stateless, so it can be previewed and tested without a ViewModel.
@@ -81,26 +84,33 @@ presentation ──▶ domain ◀── data
 ```
 
 The domain layer is plain Kotlin: no Android, OkHttp or serialization imports.
-The data layer implements the domain's repositories. Use cases hold the logic,
+The data layer implements the domain's repositories. Use cases hold the rules,
 one class per area (`ChatUseCase`, `SessionUseCase`); pure pass-throughs such as
 observing, creating or deleting sessions call the repository interface directly.
 
+What "send a message" means lives in `ChatUseCase.send()`, not in the ViewModel: create the
+session on the first message, save the user turn, cap the context, fold stream events into the
+reply, time it, save it while it streams and once more at the end, and turn failures into a
+`ChatError` on the reply. Failures cross layers as `ChatError`, never as transport exceptions;
+the UI maps each kind to a translated message.
+
 | Layer | File | Role |
 | --- | --- | --- |
-| domain | [`model/`](app/src/main/java/com/example/bifrostchat/domain/model) | `ChatMessage`, `Role`, `StreamEvent`, `LlmModel`, `ModelGroup` |
+| domain | [`model/`](app/src/main/java/com/example/bifrostchat/domain/model) | `ChatMessage`, `Role`, `StreamEvent`, `LlmModel`, `ModelGroup`, `ChatError`; `Reply.kt` folds events into a reply |
 | domain | [`repository/ChatRepository.kt`](app/src/main/java/com/example/bifrostchat/domain/repository/ChatRepository.kt) | Interface the data layer implements |
-| domain | [`usecase/ChatUseCase.kt`](app/src/main/java/com/example/bifrostchat/domain/usecase/ChatUseCase.kt) | `modelGroups()` (hides non-chat models, groups by provider, sorts) and `stream()` (drops blank turns) |
+| domain | [`usecase/ChatUseCase.kt`](app/src/main/java/com/example/bifrostchat/domain/usecase/ChatUseCase.kt) | `modelGroups()` (hides non-chat models, groups by provider) and `send()` (the whole send-and-save flow) |
 | domain | [`usecase/SessionUseCase.kt`](app/src/main/java/com/example/bifrostchat/domain/usecase/SessionUseCase.kt) | `load()` (session + messages) and `saveMessage()` (titles a chat from its first message) |
 | data | [`remote/BifrostApi.kt`](app/src/main/java/com/example/bifrostchat/data/remote/BifrostApi.kt) | OkHttp calls; turns the SSE body into a cancellable `Flow` |
-| data | [`remote/SseChunkParser.kt`](app/src/main/java/com/example/bifrostchat/data/remote/SseChunkParser.kt) | Parses one SSE line; `[DONE]` ends the stream, `error` payloads throw |
-| data | [`local/ChatDatabase.kt`](app/src/main/java/com/example/bifrostchat/data/local/ChatDatabase.kt) | Room entities (`sessions`, `messages`) and DAO; schema exported to `app/schemas/` |
+| data | [`remote/SseChunkParser.kt`](app/src/main/java/com/example/bifrostchat/data/remote/SseChunkParser.kt) | Parses one SSE line into `SseLine` (`Ignored`, `Done`, `Chunk`); `error` payloads throw |
+| data | [`remote/ErrorMapping.kt`](app/src/main/java/com/example/bifrostchat/data/remote/ErrorMapping.kt) | HTTP status, stream errors, I/O and parse failures → `ChatError` |
+| data | [`local/ChatDatabase.kt`](app/src/main/java/com/example/bifrostchat/data/local/ChatDatabase.kt) | Room entities (`sessions`, `messages`) and DAO; schema v2 (auto-migrated from v1) exported to `app/schemas/` |
 | data | [`repository/SessionRepositoryImpl.kt`](app/src/main/java/com/example/bifrostchat/data/repository/SessionRepositoryImpl.kt) | Maps Room entities to domain sessions and messages |
 | data | [`repository/ChatRepositoryImpl.kt`](app/src/main/java/com/example/bifrostchat/data/repository/ChatRepositoryImpl.kt) | Maps DTOs and gateway ids (`provider/name`) to domain models |
 | presentation | [`chat/ChatScreen.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatScreen.kt) | `ChatScreen` (collects state and effects), stateless `ChatContent` with the drawer and top bar |
 | presentation | [`chat/ChatViewModel.kt`](app/src/main/java/com/example/bifrostchat/presentation/chat/ChatViewModel.kt) | Handles intents, calls use cases, dispatches results |
 | presentation | [`chat/state/`](app/src/main/java/com/example/bifrostchat/presentation/chat/state) | MVI contract (`ChatState`, `ChatIntent`, `ChatEffect`, `ChatResult`) and the pure reducer |
-| presentation | [`chat/components/`](app/src/main/java/com/example/bifrostchat/presentation/chat/components) | `SessionDrawer`, `ModelPicker`, `MessageBubble` (reasoning, stats), `InputBar` |
-| presentation | [`chat/streaming/`](app/src/main/java/com/example/bifrostchat/presentation/chat/streaming) | `coalesceTokens()` batching and `rememberSmoothReveal()` pacing |
+| presentation | [`chat/components/`](app/src/main/java/com/example/bifrostchat/presentation/chat/components) | `SessionDrawer`, `ModelPicker`, `MessageBubble` (reasoning, stats), `InputBar`, `ErrorText` |
+| presentation | [`chat/streaming/`](app/src/main/java/com/example/bifrostchat/presentation/chat/streaming) | `rememberSmoothReveal()` pacing |
 | presentation | [`chat/markdown/`](app/src/main/java/com/example/bifrostchat/presentation/chat/markdown) | Streaming-tolerant Markdown parser (blocks and inline) and `MarkdownText` renderer |
 | presentation | [`theme/Theme.kt`](app/src/main/java/com/example/bifrostchat/presentation/theme/Theme.kt) | Navy light and dark color schemes |
 | di | [`di/Modules.kt`](app/src/main/java/com/example/bifrostchat/di/Modules.kt) | Koin `dataModule` (OkHttp, API, Room), `domainModule`, `presentationModule` |
@@ -111,10 +121,11 @@ observing, creating or deleting sessions call the repository interface directly.
 the first ~20 chunks arrived together at 2.5 s, then more came in groups about a second apart.
 This affected two design choices:
 
-- **Throttling has to flush on a timer.** A throttle that only emits when the next token arrives
-  holds the tail of each burst until the next burst, about a second later.
-  `coalesceTokens()` starts a timer at the first buffered token and flushes when it fires.
-  `Usage` and `Finished` flush the buffer first, then pass through.
+- **Timers start on the first change, not on each one.** A throttle that only acts when the next
+  token arrives holds the tail of each burst until the next burst, about a second later; a
+  debounce never fires while tokens keep coming. Saving the reply uses a timer that starts at the
+  first unsaved change and writes the latest reply when it fires (at most once a second), and no
+  timer runs while nothing has changed.
 - **tok/s is measured over the whole request.** Measuring from first to last token gave
   values like 2,000+ tok/s, because a whole burst lands in a few milliseconds.
 
@@ -123,13 +134,19 @@ spread each burst over time. `rememberSmoothReveal()` reveals at `max(80 chars/s
 big bursts drain quickly, short tails don't crawl. The frame loop only runs while there is
 a backlog, and text already present (after rotation or scrolling back) shows at once.
 
+**No UI throttle is needed.** An earlier version batched token deltas on a 50 ms timer before the
+UI. Now the domain folds events into full reply snapshots; `StateFlow` keeps only the latest and
+Compose recomposes at most once per frame, so a separate throttle added nothing. Removing it also
+made time-to-first-token exact and stopped Stop from dropping the last ≤50 ms of text.
+
 **Markdown is rendered per block.** Each paragraph, list item or code block is its own `Text`,
 so while a reply streams only the last block re-lays out; finished blocks are skipped.
 
-**Saving is per message, not per token.** The user's message is written when it is sent and
-the reply once, when the stream ends. The final write runs in `NonCancellable`, so a reply is
-still saved when the user taps Stop or switches chats mid-stream (switching waits for it with
-`cancelAndJoin`). A new chat isn't stored until its first message, so empty chats don't pile up.
+**Replies are saved while they stream.** The reply row is inserted when streaming starts and
+updated at most once a second, so killing the process loses at most that much text (tested with
+`am force-stop` mid-reply). The final write runs in `NonCancellable`, so Stop or switching chats
+(which waits with `cancelAndJoin`) keeps the partial answer; a reply that got nothing is removed.
+A new chat isn't stored until its first message, so empty chats don't pile up.
 
 **Auto-scroll uses `reverseLayout`.** Scrolling to the last item after each update missed
 the bottom when the message grew or the keyboard opened. A reversed list keeps index 0
@@ -157,7 +174,7 @@ Then:
 ```sh
 ./gradlew installDebug        # build and install on a device or emulator
 ./gradlew testDebugUnitTest          # SSE and Markdown parsers, reveal pacing, use cases, reducer, ViewModel, Koin graph (no network)
-./gradlew connectedDebugAndroidTest  # Room repository against a real database (needs a device or emulator)
+./gradlew connectedDebugAndroidTest  # Room repository and the v1→v2 migration (needs a device or emulator)
 ```
 
 > [!WARNING]

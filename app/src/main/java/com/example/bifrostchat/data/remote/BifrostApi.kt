@@ -2,6 +2,7 @@ package com.example.bifrostchat.data.remote
 
 import com.example.bifrostchat.domain.model.StreamEvent
 import java.io.IOException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -18,16 +19,18 @@ class BifrostApi(
     private val baseUrl: String,
     private val apiKey: String,
     private val http: OkHttpClient,
+    /** Blocking socket I/O runs here; injectable so tests can control it. */
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
-    suspend fun listModelIds(): List<String> = withContext(Dispatchers.IO) {
+    suspend fun listModelIds(): List<String> = withContext(io) {
         val request = Request.Builder()
             .url("$baseUrl/v1/models")
             .header("Authorization", "Bearer $apiKey")
             .build()
         http.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
-            if (!response.isSuccessful) throw BifrostException("HTTP ${response.code}: $body")
+            if (!response.isSuccessful) throw BifrostHttpException(response.code, body)
             GatewayJson.decodeFromString<ModelsResponseDto>(body).data.map { it.id }
         }
     }
@@ -52,11 +55,11 @@ class BifrostApi(
             .build()
 
         val call = http.newCall(request)
-        launch(Dispatchers.IO) {
+        launch(io) {
             try {
                 call.execute().use { response ->
                     if (!response.isSuccessful) {
-                        throw BifrostException("HTTP ${response.code}: ${response.body?.string().orEmpty()}")
+                        throw BifrostHttpException(response.code, response.body?.string().orEmpty())
                     }
                     val source = response.body!!.source()
                     while (true) {

@@ -1,5 +1,10 @@
 package com.example.bifrostchat.data.remote
 
+import com.example.bifrostchat.data.repository.ChatRepositoryImpl
+import com.example.bifrostchat.domain.model.ChatError
+import com.example.bifrostchat.domain.model.ChatException
+import com.example.bifrostchat.domain.model.ChatMessage
+import com.example.bifrostchat.domain.model.Role
 import com.example.bifrostchat.domain.model.StreamEvent
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +50,16 @@ class BifrostApiStreamTest {
         val request = server.takeRequest()
         assertEquals("Bearer test-key", request.getHeader("Authorization"))
         assertTrue(request.body.readUtf8().contains("\"stream\":true"))
+    }
+
+    @Test fun `rejected key surfaces as Unauthorized through the repository`() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"message":"invalid key"}}"""))
+
+        val error = runCatching {
+            ChatRepositoryImpl(api).streamChat("m", listOf(ChatMessage(Role.User, "hi"))).toList()
+        }.exceptionOrNull()
+
+        assertEquals(ChatError.Unauthorized, (error as ChatException).error)
     }
 
     @Test fun `cancelling while the server is silent returns immediately`() = runBlocking {

@@ -18,4 +18,9 @@ interface SessionRepository {
 
     /** Appends the message and bumps the session's updatedAt. Returns the new message id. */
     suspend fun addMessage(sessionId: Long, message: SessionMessage): Long
+
+    /** Replaces content, reasoning, error and stats of an existing message (matched by [SessionMessage.id]). */
+    suspend fun updateMessage(message: SessionMessage)
+
+    suspend fun deleteMessage(id: Long)
 }

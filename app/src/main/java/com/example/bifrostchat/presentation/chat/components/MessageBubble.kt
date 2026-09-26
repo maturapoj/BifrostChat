@@ -48,7 +48,7 @@ internal fun MessageBubble(msg: UiMessage) {
             } else {
                 AssistantContent(msg)
             }
-            msg.error?.let { Text("⚠ $it", color = MaterialTheme.colorScheme.error) }
+            msg.error?.let { Text("⚠ " + it.message(), color = MaterialTheme.colorScheme.error) }
             msg.stats?.let { StatsLine(it) }
         }
     }

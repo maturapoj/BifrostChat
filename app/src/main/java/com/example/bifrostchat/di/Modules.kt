@@ -37,12 +37,13 @@ val dataModule = module {
 }
 
 val domainModule = module {
-    factoryOf(::ChatUseCase)
+    // Lambda: ChatUseCase's timing and save-interval parameters keep their defaults.
+    factory { ChatUseCase(get(), get(), get()) }
     factoryOf(::SessionUseCase)
 }
 
 val presentationModule = module {
-    // Lambda instead of viewModelOf: the model id comes from config, and `timeSource` keeps its default.
+    // Lambda instead of viewModelOf: the default model id comes from config.
     viewModel { ChatViewModel(get(), get(), get(), initialModelId = BuildConfig.BIFROST_DEFAULT_MODEL) }
 }
 
