@@ -1,9 +1,10 @@
 package com.example.bifrostchat.data.remote
 
 import com.example.bifrostchat.domain.model.StreamEvent
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -11,12 +12,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.IOException
-
-/** Wire format of one OpenAI chat message (`role` is "user" / "assistant"). */
-data class MessageDto(val role: String, val content: String)
 
 /** Talks to the Bifrost gateway's OpenAI-compatible `/v1` endpoints. */
 class BifrostApi(
@@ -33,8 +28,7 @@ class BifrostApi(
         http.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw BifrostException("HTTP ${response.code}: $body")
-            val data = JSONObject(body).getJSONArray("data")
-            List(data.length()) { data.getJSONObject(it).getString("id") }
+            GatewayJson.decodeFromString<ModelsResponseDto>(body).data.map { it.id }
         }
     }
 
@@ -48,14 +42,7 @@ class BifrostApi(
      * read timeout, if the server has gone quiet).
      */
     fun streamChat(model: String, messages: List<MessageDto>): Flow<StreamEvent> = channelFlow {
-        val body = JSONObject()
-            .put("model", model)
-            .put("stream", true)
-            .put("stream_options", JSONObject().put("include_usage", true))
-            .put("messages", JSONArray().apply {
-                messages.forEach { put(JSONObject().put("role", it.role).put("content", it.content)) }
-            })
-            .toString()
+        val body = GatewayJson.encodeToString(ChatRequestDto(model, messages))
 
         val request = Request.Builder()
             .url("$baseUrl/v1/chat/completions")
@@ -74,8 +61,11 @@ class BifrostApi(
                     val source = response.body!!.source()
                     while (true) {
                         val line = source.readUtf8Line() ?: break
-                        val events = SseChunkParser.parseLine(line) ?: break
-                        events.forEach { send(it) }
+                        when (val parsed = SseChunkParser.parseLine(line)) {
+                            SseLine.Done -> break
+                            SseLine.Ignored -> Unit
+                            is SseLine.Chunk -> parsed.events.forEach { send(it) }
+                        }
                     }
                 }
             } catch (e: IOException) {

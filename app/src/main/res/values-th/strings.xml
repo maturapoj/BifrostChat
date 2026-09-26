@@ -1,0 +1,25 @@
+<resources>
+    <string name="open_chats">เปิดรายการแชท</string>
+    <string name="new_chat_action">ใหม่</string>
+    <string name="loading_models">กำลังโหลด models…</string>
+    <string name="models_load_failed">โหลด models ไม่ได้: %1$s</string>
+    <string name="retry">ลองใหม่</string>
+
+    <string name="chats">แชท</string>
+    <string name="new_chat">แชทใหม่</string>
+    <string name="no_saved_chats">ยังไม่มีแชทที่บันทึกไว้</string>
+    <string name="delete_chat">ลบแชท</string>
+    <string name="delete_chat_title">ลบแชทนี้?</string>
+    <string name="delete_chat_message">“%1$s” และข้อความทั้งหมดจะถูกลบออกจากเครื่องนี้</string>
+    <string name="delete">ลบ</string>
+    <string name="cancel">ยกเลิก</string>
+
+    <string name="message_hint">ข้อความ</string>
+    <string name="send">ส่ง</string>
+    <string name="stop">หยุด</string>
+    <string name="thinking">กำลังคิด…</string>
+    <string name="thought">ความคิด</string>
+
+    <string name="copy">คัดลอก</string>
+    <string name="copied">คัดลอกแล้ว</string>
+</resources>

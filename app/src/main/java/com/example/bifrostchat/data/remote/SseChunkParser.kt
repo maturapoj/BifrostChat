@@ -1,48 +1,44 @@
 package com.example.bifrostchat.data.remote
 
 import com.example.bifrostchat.domain.model.StreamEvent
-import org.json.JSONObject
 
-/**
- * Turns one SSE line (`data: {...}`) into zero or more [StreamEvent]s.
- * Returns null when the server sends `data: [DONE]`.
- */
+/** What one SSE line means for the stream. */
+sealed interface SseLine {
+    /** Blank keep-alive, `event:` or `: comment` line. */
+    data object Ignored : SseLine
+
+    /** `data: [DONE]`: the server finished the stream. */
+    data object Done : SseLine
+
+    data class Chunk(val events: List<StreamEvent>) : SseLine
+}
+
+/** Turns one SSE line (`data: {...}`) into an [SseLine]. */
 object SseChunkParser {
 
-    fun parseLine(line: String): List<StreamEvent>? {
-        if (!line.startsWith("data:")) return emptyList() // blank keep-alive, `event:`, `: comment`
+    fun parseLine(line: String): SseLine {
+        if (!line.startsWith("data:")) return SseLine.Ignored
         val payload = line.removePrefix("data:").trim()
-        if (payload == "[DONE]") return null
-        if (payload.isEmpty()) return emptyList()
+        if (payload == "[DONE]") return SseLine.Done
+        if (payload.isEmpty()) return SseLine.Ignored
 
-        val json = JSONObject(payload)
-        json.optJSONObject("error")?.let { throw BifrostException(it.optString("message", payload)) }
+        val chunk = GatewayJson.decodeFromString<ChunkDto>(payload)
+        chunk.error?.let { throw BifrostException(it.message ?: payload) }
 
-        val events = mutableListOf<StreamEvent>()
-        val choice = json.optJSONArray("choices")?.optJSONObject(0)
-        if (choice != null) {
-            val delta = choice.optJSONObject("delta")
-            if (delta != null) {
-                delta.optNonEmpty("reasoning")
-                    ?.let { events += StreamEvent.Reasoning(it) }
-                    ?: delta.optNonEmpty("reasoning_content")?.let { events += StreamEvent.Reasoning(it) }
-                delta.optNonEmpty("content")?.let { events += StreamEvent.Content(it) }
+        val events = buildList {
+            chunk.choices.firstOrNull()?.let { choice ->
+                choice.delta?.let { delta ->
+                    (delta.reasoning.nonEmpty() ?: delta.reasoningContent.nonEmpty())?.let { add(StreamEvent.Reasoning(it)) }
+                    delta.content.nonEmpty()?.let { add(StreamEvent.Content(it)) }
+                }
+                choice.finishReason.nonEmpty()?.let { add(StreamEvent.Finished(it)) }
             }
-            choice.optNonEmpty("finish_reason")?.let { events += StreamEvent.Finished(it) }
+            chunk.usage?.let {
+                add(StreamEvent.Usage(it.promptTokens, it.completionTokens, it.details?.reasoningTokens ?: 0))
+            }
         }
-
-        json.optJSONObject("usage")?.let { usage ->
-            events += StreamEvent.Usage(
-                promptTokens = usage.optInt("prompt_tokens"),
-                completionTokens = usage.optInt("completion_tokens"),
-                reasoningTokens = usage.optJSONObject("completion_tokens_details")
-                    ?.optInt("reasoning_tokens") ?: 0,
-            )
-        }
-        return events
+        return SseLine.Chunk(events)
     }
 
-    // optString returns "null" for JSON null, so check explicitly.
-    private fun JSONObject.optNonEmpty(key: String): String? =
-        if (isNull(key)) null else optString(key).takeIf { it.isNotEmpty() }
+    private fun String?.nonEmpty(): String? = this?.takeIf { it.isNotEmpty() }
 }

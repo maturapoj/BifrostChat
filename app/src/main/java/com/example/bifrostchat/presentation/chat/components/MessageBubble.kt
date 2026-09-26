@@ -18,9 +18,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.bifrostchat.R
 import com.example.bifrostchat.domain.model.Role
 import com.example.bifrostchat.domain.model.StreamStats
 import com.example.bifrostchat.presentation.chat.markdown.MarkdownText
@@ -72,7 +74,7 @@ private fun ReasoningBlock(text: String, stillThinking: Boolean) {
     var expanded by rememberSaveable { mutableStateOf(true) }
     Column(Modifier.padding(bottom = 6.dp)) {
         Text(
-            (if (stillThinking) "Thinking…" else "Thought") + if (expanded) " ▴" else " ▾",
+            stringResource(if (stillThinking) R.string.thinking else R.string.thought) + if (expanded) " ▴" else " ▾",
             style = MaterialTheme.typography.labelMedium,
             modifier = Modifier.clickable { expanded = !expanded },
         )

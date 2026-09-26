@@ -4,9 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bifrostchat.domain.model.ChatMessage
 import com.example.bifrostchat.domain.model.Role
-import com.example.bifrostchat.domain.usecase.GetModelGroupsUseCase
-import com.example.bifrostchat.domain.usecase.SessionUseCases
-import com.example.bifrostchat.domain.usecase.StreamChatUseCase
+import com.example.bifrostchat.domain.repository.SessionRepository
+import com.example.bifrostchat.domain.usecase.ChatUseCase
+import com.example.bifrostchat.domain.usecase.SessionUseCase
 import com.example.bifrostchat.presentation.chat.state.ChatEffect
 import com.example.bifrostchat.presentation.chat.state.ChatIntent
 import com.example.bifrostchat.presentation.chat.state.ChatResult
@@ -16,6 +16,7 @@ import com.example.bifrostchat.presentation.chat.state.reduce
 import com.example.bifrostchat.presentation.chat.state.toSessionMessage
 import com.example.bifrostchat.presentation.chat.state.toUi
 import com.example.bifrostchat.presentation.chat.streaming.coalesceTokens
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -31,16 +32,16 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.time.TimeSource
 
 class ChatViewModel(
-    private val getModelGroups: GetModelGroupsUseCase,
-    private val streamChat: StreamChatUseCase,
-    private val sessions: SessionUseCases,
+    private val chat: ChatUseCase,
+    private val sessionUseCase: SessionUseCase,
+    private val sessions: SessionRepository,
+    initialModelId: String = "",
     private val timeSource: TimeSource = TimeSource.Monotonic,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(ChatState())
+    private val _state = MutableStateFlow(ChatState(selectedModelId = initialModelId))
     val state: StateFlow<ChatState> = _state.asStateFlow()
 
     private val _effects = Channel<ChatEffect>(Channel.BUFFERED)
@@ -74,7 +75,7 @@ class ChatViewModel(
     private fun loadModels() {
         viewModelScope.launch {
             try {
-                dispatch(ChatResult.ModelsLoaded(getModelGroups()))
+                dispatch(ChatResult.ModelsLoaded(chat.modelGroups()))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -85,7 +86,7 @@ class ChatViewModel(
 
     private fun observeSessions() {
         viewModelScope.launch {
-            sessions.observe().collectIndexed { index, list ->
+            sessions.observeSessions().collectIndexed { index, list ->
                 dispatch(ChatResult.SessionsUpdated(list))
                 // Reopen the latest chat on launch, unless the user already started typing into a new one.
                 if (index == 0 && _state.value.messages.isEmpty()) list.firstOrNull()?.let { switchTo(it.id) }
@@ -104,19 +105,19 @@ class ChatViewModel(
             dispatch(ChatResult.NewChatStarted)
             return@runSessionChange
         }
-        val loaded = sessions.load(id) ?: return@runSessionChange
+        val loaded = sessionUseCase.load(id) ?: return@runSessionChange
         nextId = (loaded.messages.maxOfOrNull { it.id } ?: 0) + 1
         dispatch(ChatResult.SessionOpened(id, loaded.session.modelId, loaded.messages.map { it.toUi() }))
     }
 
     private fun deleteSession(id: Long) {
         if (id != _state.value.currentSessionId) {
-            viewModelScope.launch { sessions.delete(id) }
+            viewModelScope.launch { sessions.deleteSession(id) }
             return
         }
         runSessionChange {
             dispatch(ChatResult.NewChatStarted)
-            sessions.delete(id)
+            sessions.deleteSession(id)
         }
     }
 
@@ -152,10 +153,10 @@ class ChatViewModel(
             var sessionId: Long? = null
             try {
                 sessionId = current.currentSessionId
-                    ?: sessions.create(current.selectedModelId).also { dispatch(ChatResult.SessionCreated(it)) }
-                sessions.saveMessage(sessionId, user.toSessionMessage())
+                    ?: sessions.createSession(title = "", modelId = current.selectedModelId).also { dispatch(ChatResult.SessionCreated(it)) }
+                sessionUseCase.saveMessage(sessionId, user.toSessionMessage())
 
-                streamChat(current.selectedModelId, history).coalesceTokens().collect { event ->
+                chat.stream(current.selectedModelId, history).coalesceTokens().collect { event ->
                     dispatch(ChatResult.StreamEventReceived(assistantId, event, start.elapsedNow()))
                 }
             } catch (e: CancellationException) {
@@ -168,7 +169,7 @@ class ChatViewModel(
                 val id = sessionId
                 val reply = _state.value.messages.find { it.id == assistantId }
                 if (id != null && reply != null && (reply.content.isNotEmpty() || reply.reasoning.isNotEmpty() || reply.error != null)) {
-                    withContext(NonCancellable) { sessions.saveMessage(id, reply.toSessionMessage()) }
+                    withContext(NonCancellable) { sessionUseCase.saveMessage(id, reply.toSessionMessage()) }
                 }
             }
         }

@@ -4,6 +4,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
     id("androidx.room")
 }
@@ -28,6 +29,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "BIFROST_API_KEY", "\"${localProps.getProperty("bifrost.apiKey", "")}\"")
+        // Optional; when empty the first model from /v1/models is selected.
+        buildConfigField("String", "BIFROST_DEFAULT_MODEL", "\"${localProps.getProperty("bifrost.defaultModel", "")}\"")
     }
 
     buildFeatures {
@@ -75,10 +78,10 @@ dependencies {
     ksp("androidx.room:room-compiler:2.8.4")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.json:json:20240303")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
     testImplementation("io.insert-koin:koin-test-junit4:4.1.0")

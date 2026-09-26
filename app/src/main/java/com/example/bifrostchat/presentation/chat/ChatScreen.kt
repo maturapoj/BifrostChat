@@ -35,10 +35,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.bifrostchat.R
 import com.example.bifrostchat.domain.model.LlmModel
 import com.example.bifrostchat.domain.model.ModelGroup
 import com.example.bifrostchat.domain.model.Role
@@ -60,14 +66,15 @@ import org.koin.androidx.compose.koinViewModel
 fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    val resources = LocalResources.current
 
     LaunchedEffect(vm) {
         vm.effects.collect { effect ->
             when (effect) {
                 is ChatEffect.ModelsFailed -> {
                     val result = snackbar.showSnackbar(
-                        message = "โหลด models ไม่ได้: ${effect.message}",
-                        actionLabel = "Retry",
+                        message = resources.getString(R.string.models_load_failed, effect.message),
+                        actionLabel = resources.getString(R.string.retry),
                         duration = SnackbarDuration.Indefinite,
                     )
                     if (result == SnackbarResult.ActionPerformed) vm.onIntent(ChatIntent.LoadModels)
@@ -119,16 +126,18 @@ fun ChatContent(
                     }
                 },
                 navigationIcon = {
+                    val openChats = stringResource(R.string.open_chats)
                     TextButton(
                         onClick = { scope.launch { drawerState.open() } },
                         colors = ButtonDefaults.textButtonColors(contentColor = LocalContentColor.current),
-                    ) { Text("☰", fontSize = 20.sp) }
+                        modifier = Modifier.semantics { contentDescription = openChats },
+                    ) { Text("☰", fontSize = 20.sp, modifier = Modifier.clearAndSetSemantics {}) }
                 },
                 actions = {
                     TextButton(
                         onClick = { onIntent(ChatIntent.NewChat) },
                         colors = ButtonDefaults.textButtonColors(contentColor = LocalContentColor.current),
-                    ) { Text("New") }
+                    ) { Text(stringResource(R.string.new_chat_action)) }
                 },
                 // Navy bar: primary in light mode; in dark mode primary is light blue, so use the navy container.
                 colors = if (isSystemInDarkTheme()) {
@@ -175,6 +184,7 @@ private fun ChatContentPreview() {
     BifrostChatTheme {
         ChatContent(
             state = ChatState(
+                selectedModelId = "dashscope/deepseek-v4-flash-0731",
                 modelGroups = listOf(
                     ModelGroup("dashscope", listOf(LlmModel("dashscope/deepseek-v4-flash-0731", "dashscope", "deepseek-v4-flash-0731"))),
                 ),

@@ -11,7 +11,8 @@ import kotlin.time.Duration
 
 data class ChatState(
     val modelGroups: List<ModelGroup> = emptyList(),
-    val selectedModelId: String = DEFAULT_MODEL_ID,
+    /** Empty until models load, unless a default is configured; then the first model is picked. */
+    val selectedModelId: String = "",
     val messages: List<UiMessage> = emptyList(),
     val isStreaming: Boolean = false,
     val sessions: List<ChatSession> = emptyList(),
@@ -20,10 +21,6 @@ data class ChatState(
 ) {
     val selectedModel: LlmModel?
         get() = modelGroups.asSequence().flatMap { it.models }.firstOrNull { it.id == selectedModelId }
-
-    companion object {
-        const val DEFAULT_MODEL_ID = "dashscope/deepseek-v4-flash-0731"
-    }
 }
 
 data class UiMessage(

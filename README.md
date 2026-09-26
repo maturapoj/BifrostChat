@@ -45,7 +45,7 @@ and renders the reply as it arrives: reasoning tokens and answer tokens appear s
 OkHttp response body
   └─ readUtf8Line()              one SSE line at a time, as soon as it arrives
       └─ SseChunkParser          "data: {...}" → Reasoning / Content / Usage / Finished
-          └─ Flow<StreamEvent>   BifrostApi → ChatRepository → StreamChatUseCase, runs on Dispatchers.IO
+          └─ Flow<StreamEvent>   BifrostApi → ChatRepository → ChatUseCase.stream(), runs on Dispatchers.IO
               └─ coalesceTokens()  batches deltas on a 50 ms timer
                   └─ ChatViewModel  wraps each event as ChatResult.StreamEventReceived
                       └─ reduce()    pure (ChatState, ChatResult) → ChatState
@@ -80,17 +80,17 @@ presentation ──▶ domain ◀── data
       └────────── di ─────────┘   (Koin wires the layers together)
 ```
 
-The domain layer is plain Kotlin: no Android, OkHttp or `org.json` imports.
-The data layer implements the domain's `ChatRepository`, and the presentation
-layer only depends on the use cases.
+The domain layer is plain Kotlin: no Android, OkHttp or serialization imports.
+The data layer implements the domain's repositories. Use cases hold the logic,
+one class per area (`ChatUseCase`, `SessionUseCase`); pure pass-throughs such as
+observing, creating or deleting sessions call the repository interface directly.
 
 | Layer | File | Role |
 | --- | --- | --- |
 | domain | [`model/`](app/src/main/java/com/example/bifrostchat/domain/model) | `ChatMessage`, `Role`, `StreamEvent`, `LlmModel`, `ModelGroup` |
 | domain | [`repository/ChatRepository.kt`](app/src/main/java/com/example/bifrostchat/domain/repository/ChatRepository.kt) | Interface the data layer implements |
-| domain | [`usecase/GetModelGroupsUseCase.kt`](app/src/main/java/com/example/bifrostchat/domain/usecase/GetModelGroupsUseCase.kt) | Drops non-chat models, groups by provider, sorts |
-| domain | [`usecase/SessionUseCases.kt`](app/src/main/java/com/example/bifrostchat/domain/usecase/SessionUseCases.kt) | Observe, load, create, delete sessions; save messages (sets the title) |
-| domain | [`usecase/StreamChatUseCase.kt`](app/src/main/java/com/example/bifrostchat/domain/usecase/StreamChatUseCase.kt) | Streams a reply; drops blank turns |
+| domain | [`usecase/ChatUseCase.kt`](app/src/main/java/com/example/bifrostchat/domain/usecase/ChatUseCase.kt) | `modelGroups()` (hides non-chat models, groups by provider, sorts) and `stream()` (drops blank turns) |
+| domain | [`usecase/SessionUseCase.kt`](app/src/main/java/com/example/bifrostchat/domain/usecase/SessionUseCase.kt) | `load()` (session + messages) and `saveMessage()` (titles a chat from its first message) |
 | data | [`remote/BifrostApi.kt`](app/src/main/java/com/example/bifrostchat/data/remote/BifrostApi.kt) | OkHttp calls; turns the SSE body into a cancellable `Flow` |
 | data | [`remote/SseChunkParser.kt`](app/src/main/java/com/example/bifrostchat/data/remote/SseChunkParser.kt) | Parses one SSE line; `[DONE]` ends the stream, `error` payloads throw |
 | data | [`local/ChatDatabase.kt`](app/src/main/java/com/example/bifrostchat/data/local/ChatDatabase.kt) | Room entities (`sessions`, `messages`) and DAO; schema exported to `app/schemas/` |
@@ -149,6 +149,7 @@ Fill in `local.properties`:
 sdk.dir=/path/to/Android/sdk
 bifrost.baseUrl=https://your-gateway.example.com   # without /v1
 bifrost.apiKey=sk-...
+bifrost.defaultModel=provider/model   # optional; otherwise the first listed model
 ```
 
 Then:

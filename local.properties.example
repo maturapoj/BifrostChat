@@ -2,3 +2,5 @@
 sdk.dir=/path/to/Android/sdk
 bifrost.baseUrl=https://your-gateway.example.com
 bifrost.apiKey=sk-bf-YOUR_KEY
+# Optional: model selected on first launch (otherwise the first one listed)
+# bifrost.defaultModel=provider/model-name

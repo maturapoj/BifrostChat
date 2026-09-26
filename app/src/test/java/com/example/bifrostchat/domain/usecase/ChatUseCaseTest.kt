@@ -10,7 +10,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-class GetModelGroupsUseCaseTest {
+class ChatUseCaseTest {
 
     private fun repoOf(vararg ids: String) = object : ChatRepository {
         override suspend fun getModels() = ids.map { LlmModel(it, it.substringBefore('/'), it.substringAfter('/')) }
@@ -18,9 +18,9 @@ class GetModelGroupsUseCaseTest {
     }
 
     @Test fun `groups by provider, sorts both levels, drops embedding models`() = runTest {
-        val groups = GetModelGroupsUseCase(
+        val groups = ChatUseCase(
             repoOf("huawei/glm-5.3", "dashscope/qwen3.7-plus", "dashscope/qwen3.7-text-embedding", "huawei/glm-5.2", "dashscope/kimi-k3"),
-        )()
+        ).modelGroups()
 
         assertEquals(listOf("dashscope", "huawei"), groups.map { it.provider })
         assertEquals(listOf("kimi-k3", "qwen3.7-plus"), groups[0].models.map { it.name })

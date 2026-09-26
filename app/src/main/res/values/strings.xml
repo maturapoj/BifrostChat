@@ -1,3 +1,32 @@
 <resources>
     <string name="app_name">Bifrost Chat</string>
+
+    <!-- Top bar -->
+    <string name="open_chats">Open chats</string>
+    <string name="new_chat_action">New</string>
+    <string name="loading_models">Loading models…</string>
+    <string name="models_load_failed">Couldn\'t load models: %1$s</string>
+    <string name="retry">Retry</string>
+
+    <!-- Chat drawer -->
+    <string name="chats">Chats</string>
+    <string name="new_chat">New chat</string>
+    <string name="no_saved_chats">No saved chats yet</string>
+    <string name="delete_chat">Delete chat</string>
+    <string name="delete_chat_title">Delete chat?</string>
+    <string name="delete_chat_message">“%1$s” and its messages will be removed from this device.</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- Messages -->
+    <string name="message_hint">Message</string>
+    <string name="send">Send</string>
+    <string name="stop">Stop</string>
+    <string name="thinking">Thinking…</string>
+    <string name="thought">Thought</string>
+
+    <!-- Code blocks -->
+    <string name="code_label" translatable="false">code</string>
+    <string name="copy">Copy</string>
+    <string name="copied">Copied</string>
 </resources>

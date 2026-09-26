@@ -14,7 +14,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.example.bifrostchat.R
 
 @Composable
 internal fun InputBar(isStreaming: Boolean, onSend: (String) -> Unit, onStop: () -> Unit) {
@@ -24,17 +26,17 @@ internal fun InputBar(isStreaming: Boolean, onSend: (String) -> Unit, onStop: ()
             value = text,
             onValueChange = { text = it },
             modifier = Modifier.weight(1f),
-            placeholder = { Text("Message") },
+            placeholder = { Text(stringResource(R.string.message_hint)) },
             maxLines = 5,
         )
         if (isStreaming) {
-            OutlinedButton(onClick = onStop, modifier = Modifier.padding(start = 8.dp)) { Text("Stop") }
+            OutlinedButton(onClick = onStop, modifier = Modifier.padding(start = 8.dp)) { Text(stringResource(R.string.stop)) }
         } else {
             Button(
                 onClick = { onSend(text); text = "" },
                 enabled = text.isNotBlank(),
                 modifier = Modifier.padding(start = 8.dp),
-            ) { Text("Send") }
+            ) { Text(stringResource(R.string.send)) }
         }
     }
 }

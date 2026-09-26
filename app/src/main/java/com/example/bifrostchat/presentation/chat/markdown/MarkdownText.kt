@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.bifrostchat.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -108,7 +110,7 @@ private fun CodeBlock(block: MdBlock.Code) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                block.language.ifEmpty { "code" },
+                block.language.ifEmpty { stringResource(R.string.code_label) },
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
@@ -116,7 +118,7 @@ private fun CodeBlock(block: MdBlock.Code) {
             // Copy only once the fence has closed, so a half-streamed snippet isn't copied.
             if (block.closed) {
                 Text(
-                    if (copied) "Copied" else "Copy",
+                    stringResource(if (copied) R.string.copied else R.string.copy),
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.primary,
                     modifier = Modifier

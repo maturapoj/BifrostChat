@@ -6,15 +6,8 @@ import com.example.bifrostchat.domain.model.Role
 import com.example.bifrostchat.domain.model.SessionMessage
 import com.example.bifrostchat.domain.model.StreamEvent
 import com.example.bifrostchat.domain.repository.ChatRepository
-import com.example.bifrostchat.domain.usecase.CreateSessionUseCase
-import com.example.bifrostchat.domain.usecase.DeleteSessionUseCase
-import com.example.bifrostchat.domain.usecase.GetModelGroupsUseCase
-import com.example.bifrostchat.domain.usecase.LoadSessionUseCase
-import com.example.bifrostchat.domain.usecase.ObserveSessionsUseCase
-import com.example.bifrostchat.domain.usecase.SaveMessageUseCase
-import com.example.bifrostchat.domain.usecase.SessionUseCases
-import com.example.bifrostchat.domain.usecase.SetSessionModelUseCase
-import com.example.bifrostchat.domain.usecase.StreamChatUseCase
+import com.example.bifrostchat.domain.usecase.ChatUseCase
+import com.example.bifrostchat.domain.usecase.SessionUseCase
 import com.example.bifrostchat.fakes.FakeSessionRepository
 import com.example.bifrostchat.presentation.chat.state.ChatEffect
 import com.example.bifrostchat.presentation.chat.state.ChatIntent
@@ -63,18 +56,16 @@ class ChatViewModelTest {
         }
     }
 
-    private fun TestScope.viewModel(chat: ChatRepository, sessions: FakeSessionRepository = FakeSessionRepository()) =
+    private fun TestScope.viewModel(
+        chat: ChatRepository,
+        sessions: FakeSessionRepository = FakeSessionRepository(),
+        initialModelId: String = "",
+    ) =
         ChatViewModel(
-            GetModelGroupsUseCase(chat),
-            StreamChatUseCase(chat),
-            SessionUseCases(
-                ObserveSessionsUseCase(sessions),
-                LoadSessionUseCase(sessions),
-                CreateSessionUseCase(sessions),
-                DeleteSessionUseCase(sessions),
-                SaveMessageUseCase(sessions),
-                SetSessionModelUseCase(sessions),
-            ),
+            ChatUseCase(chat),
+            SessionUseCase(sessions),
+            sessions,
+            initialModelId = initialModelId,
             timeSource = testScheduler.timeSource,
         ).also { advanceUntilIdle() }
 
@@ -88,6 +79,12 @@ class ChatViewModelTest {
         val vm = viewModel(FakeChatRepository())
         assertEquals("p/m1", vm.state.value.selectedModelId)
         assertEquals(listOf("p"), vm.state.value.modelGroups.map { it.provider })
+    }
+
+    @Test fun `configured default model is used when the gateway lists it`() = runTest(dispatcher) {
+        val chat = FakeChatRepository(models = { listOf(LlmModel("p/m1", "p", "m1"), LlmModel("p/m2", "p", "m2")) })
+        assertEquals("p/m2", viewModel(chat, initialModelId = "p/m2").state.value.selectedModelId)
+        assertEquals("p/m1", viewModel(chat, initialModelId = "p/gone").state.value.selectedModelId)
     }
 
     @Test fun `send streams reply into state`() = runTest(dispatcher) {

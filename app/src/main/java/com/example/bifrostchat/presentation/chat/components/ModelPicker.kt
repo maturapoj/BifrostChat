@@ -16,7 +16,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.example.bifrostchat.R
 import com.example.bifrostchat.domain.model.LlmModel
 import com.example.bifrostchat.domain.model.ModelGroup
 
@@ -31,7 +33,7 @@ internal fun ModelPicker(
     Box {
         Column(Modifier.clickable(enabled = enabled) { expanded = true }) {
             Text(
-                text = (selected?.name ?: "Loading models…") + " ▾",
+                text = (selected?.name ?: stringResource(R.string.loading_models)) + " ▾",
                 style = MaterialTheme.typography.titleMedium,
             )
             selected?.let {
