@@ -46,8 +46,16 @@ CI runs both, plus the secret scan, on every push and pull request.
 
 ## Releases (maintainers)
 
-Pushing a `v*` tag builds a signed APK and publishes it as a GitHub Release. The workflow needs
-these repository secrets:
+```sh
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+A tag like `v1.2.3` builds a signed, minified APK and publishes it as a GitHub Release with
+generated notes. The version comes from the tag: `versionName` is `1.2.3` and `versionCode` is
+`10203` (major × 10000 + minor × 100 + patch), so a higher version always installs over a lower
+one. Minor and patch go up to 99; other tag shapes are rejected. Local builds are `0.0.0-dev`.
+
+The workflow needs these repository secrets:
 
 | Secret | Value |
 | --- | --- |
@@ -57,4 +65,6 @@ these repository secrets:
 | `TOKENFLOW_KEY_PASSWORD` | key password |
 
 Create the keystore once with `keytool -genkeypair -v -keystore release.keystore -keyalg RSA
--keysize 4096 -validity 10000 -alias tokenflow` and keep it out of the repository.
+-keysize 4096 -validity 10000 -alias tokenflow` and keep it out of the repository. Back it up
+with its passwords somewhere safe (e.g. a password manager): if it is lost, users can't update
+over an installed version and have to reinstall, losing their chats.

@@ -35,6 +35,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.maturapoj.tokenflow.BuildConfig
 import io.github.maturapoj.tokenflow.R
 import io.github.maturapoj.tokenflow.presentation.chat.components.message
 import io.github.maturapoj.tokenflow.presentation.theme.navyTopAppBarColors
@@ -127,6 +128,14 @@ fun SettingsContent(state: SettingsState, onIntent: (SettingsIntent) -> Unit, on
                 )
                 is SaveStatus.Failed -> Text("⚠ " + status.error.message(), color = MaterialTheme.colorScheme.error)
             }
+
+            // Handy for bug reports.
+            Text(
+                stringResource(R.string.app_name) + " " + BuildConfig.VERSION_NAME,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.padding(top = 24.dp),
+            )
         }
     }
 }

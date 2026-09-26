@@ -21,6 +21,13 @@ jobs:
           java-version: 17
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
+      - name: Check the tag is a version
+        run: |
+          if ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
+            echo "::error::Tag must look like v1.2.3 (minor and patch up to 99), got $GITHUB_REF_NAME"
+            exit 1
+          fi
+
       - name: Decode signing keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.TOKENFLOW_KEYSTORE_BASE64 }}
@@ -37,6 +44,7 @@ jobs:
           TOKENFLOW_KEYSTORE_PASSWORD: ${{ secrets.TOKENFLOW_KEYSTORE_PASSWORD }}
           TOKENFLOW_KEY_ALIAS: ${{ secrets.TOKENFLOW_KEY_ALIAS }}
           TOKENFLOW_KEY_PASSWORD: ${{ secrets.TOKENFLOW_KEY_PASSWORD }}
+          TOKENFLOW_VERSION_NAME: ${{ github.ref_name }}
         run: |
           ./gradlew assembleRelease
           cp app/build/outputs/apk/release/app-release.apk "TokenFlow-${GITHUB_REF_NAME}.apk"

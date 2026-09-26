@@ -10,6 +10,16 @@ plugins {
 }
 
 // API key lives in local.properties (gitignored), never in source.
+// Release CI passes the git tag (e.g. v1.2.3); local builds are "0.0.0-dev".
+val releaseVersion: String = System.getenv("TOKENFLOW_VERSION_NAME")?.removePrefix("v") ?: "0.0.0-dev"
+
+/** 1.2.3 → 10203, so a higher semver always installs over a lower one. Allows minor/patch up to 99. */
+fun versionCodeOf(version: String): Int {
+    val (major, minor, patch) = Regex("""(\d+)\.(\d+)\.(\d+)""").find(version)?.destructured
+        ?: return 1
+    return major.toInt() * 10_000 + minor.toInt() * 100 + patch.toInt()
+}
+
 val localProps = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
@@ -22,8 +32,8 @@ android {
         applicationId = "io.github.maturapoj.tokenflow"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = versionCodeOf(releaseVersion).coerceAtLeast(1)
+        versionName = releaseVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
